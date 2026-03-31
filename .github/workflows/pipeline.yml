@@ -11,6 +11,7 @@ jobs:
     name: Build CLIs Go
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         goos: [linux, windows, darwin]
         app: [cli-assinatura, cli-simulador]
@@ -18,10 +19,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build Multiplataforma cli-assinatura
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22' 
+
+    - name: Build Multiplataforma
       working-directory: ./${{ matrix.app }}
       run: |
-        mkdir -p ../build/cli-assinatura
+        mkdir -p ../build/${{ matrix.app }}
+      
         go mod tidy
         
         BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
@@ -29,29 +36,10 @@ jobs:
         
         echo "Iniciando build de ${{ matrix.app }} para ${{ matrix.goos }}..."
         
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-assinatura/$BINARY_NAME ./cmd/assinatura/main.go
+        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/${{ matrix.app }}/$BINARY_NAME ./cmd/...
 
-    - name: Upload Artifacts cli-assinatura
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: binarios-${{ matrix.app }}-${{ matrix.goos }}
-        path: build/cli-assinatura/
-
-    - name: Build Multiplataforma cli-simulador
-      working-directory: ./${{ matrix.app }}
-      run: |
-        mkdir -p ../build/cli-simulador
-        go mod tidy
-        
-        BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
-        if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
-        
-        echo "Iniciando build de ${{ matrix.app }} para ${{ matrix.goos }}..."
-        
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-simulador/$BINARY_NAME ./cmd/simulador/main.go
-
-    - name: Upload Artifacts cli-simulador
-      uses: actions/upload-artifact@v4
-      with:
-        name: binarios-${{ matrix.app }}-${{ matrix.goos }}
-        path: build/cli-simulador/
+        name: ${{ matrix.app }}-${{ matrix.goos }}
+        path: build/${{ matrix.app }}/
