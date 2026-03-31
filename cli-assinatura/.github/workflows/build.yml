@@ -1,0 +1,38 @@
+name: Build Multiplataforma
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            name: assinatura-linux
+          - os: windows
+            arch: amd64
+            name: assinatura-windows.exe
+          - os: darwin
+            arch: amd64
+            name: assinatura-macos
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: |
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
+          go build -o build/${{ matrix.name }} ./cmd/assinatura
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: build/${{ matrix.name }}
