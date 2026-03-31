@@ -14,8 +14,7 @@ jobs:
       matrix:
         # Plataformas exigidas
         goos: [linux, windows, darwin]
-        # Aplicações que queremos compilar
-        app: [cli-assinatura, cli-simulador]
+        app: [cli-assinatura]
     
     steps:
     - uses: actions/checkout@v4
@@ -32,12 +31,10 @@ jobs:
         BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
         if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
         
-        # O ponto (.) indica que o main está na raiz da pasta da aplicação ou subpasta cmd
-        # Ajuste o caminho abaixo se o seu main.go estiver em cmd/assinatura/
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/$BINARY_NAME ./cmd/assinatura/main.go || go build -o ../build/$BINARY_NAME .
+        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-assinatura/$BINARY_NAME ./cli-assinatura/cmd/assinatura/main.go || go build -o ../build/cli-assinatura/$BINARY_NAME .
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: binarios-${{ matrix.app }}-${{ matrix.goos }}
-        path: build/
+        path: build/cli-assinatura/
