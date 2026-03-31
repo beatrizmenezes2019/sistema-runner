@@ -11,5 +11,5 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() error {
-    return rootCmd.Execute() // Se isso não for retornado/chamado, nada acontece
+    return rootCmd.Execute() 
 }
