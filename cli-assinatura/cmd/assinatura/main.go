@@ -1,7 +1,7 @@
 package main
 
 import (
-    "github.com/beatrizmenezes2019/sistema-runner/internal/cli" // Verifique se o path está certo
+    "github.com/beatrizmenezes2019/sistema-runner/cli-assinatura/internal/cli"
     "log"
 )
 
