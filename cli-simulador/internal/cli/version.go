@@ -9,7 +9,7 @@ var versionCmd = &cobra.Command{
     Use:   "version",
     Short: "Exibe a versão atual do CLI",
     Run: func(cmd *cobra.Command, args []string) {
-        fmt.Println("Sistema Runner CLI Assinatura - Versão: 0.1.0")
+        fmt.Println("Sistema Runner CLI Simulador - Versão: 0.1.0")
     },
 }
 
