@@ -19,19 +19,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22'
-
     - name: Build Multiplataforma
-      # O working-directory faz o 'go build' rodar dentro da pasta da aplicação
       working-directory: ./${{ matrix.app }}
       run: |
+        mkdir -p ../build/cli-assinatura
+        
         BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
         if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
         
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-assinatura/$BINARY_NAME ./cli-assinatura/cmd/assinatura/main.go || go build -o ../build/cli-assinatura/$BINARY_NAME .
+        echo "Iniciando build de ${{ matrix.app }} para ${{ matrix.goos }}..."
+        
+        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-assinatura/$BINARY_NAME ./cmd/assinatura/main.go
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
