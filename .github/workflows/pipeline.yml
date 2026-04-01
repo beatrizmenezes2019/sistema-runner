@@ -3,6 +3,8 @@ name: Sistema Runner CI
 on:
   push:
     branches: [ "main" ]
+    tags:
+      - 'v*' 
   pull_request:
     branches: [ "main" ]
 
@@ -11,7 +13,6 @@ jobs:
     name: Build CLIs Go
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         goos: [linux, windows, darwin]
         app: [cli-assinatura, cli-simulador]
@@ -22,24 +23,74 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.22' 
+        go-version: '1.22'
 
-    - name: Build Multiplataforma
+    - name: Build Multiplataforma cli-assinatura
+      if: matrix.app == 'cli-assinatura'
       working-directory: ./${{ matrix.app }}
       run: |
-        mkdir -p ../build/${{ matrix.app }}
-      
+        mkdir -p ../build/cli-assinatura
         go mod tidy
-        
         BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
         if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
-        
-        echo "Iniciando build de ${{ matrix.app }} para ${{ matrix.goos }}..."
-        
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/${{ matrix.app }}/$BINARY_NAME ./cmd/...
+        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-assinatura/$BINARY_NAME ./cmd/assinatura/main.go
+
+    - name: Build Multiplataforma cli-simulador
+      if: matrix.app == 'cli-simulador'
+      working-directory: ./${{ matrix.app }}
+      run: |
+        mkdir -p ../build/cli-simulador
+        go mod tidy
+        BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
+        if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
+        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-simulador/$BINARY_NAME ./cmd/simulador/main.go
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.app }}-${{ matrix.goos }}
-        path: build/${{ matrix.app }}/
+        name: check-build-${{ matrix.app }}-${{ matrix.goos }}
+        path: build/
+
+  release:
+    name: Publicar Release
+    needs: build-go-apps
+    if: startsWith(github.ref, 'refs/tags/v') 
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+
+    - name: Gerar Binários Oficiais para Release
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        mkdir -p dist
+        
+        for os in linux windows darwin; do
+          EXT=""
+          if [ "$os" = "windows" ]; then EXT=".exe"; fi
+          GOOS=$os GOARCH=amd64 go build -o dist/cli-assinatura-$VERSION-$os-amd64$EXT ./cli-assinatura/cmd/assinatura/main.go
+        done
+
+        for os in linux windows darwin; do
+          EXT=""
+          if [ "$os" = "windows" ]; then EXT=".exe"; fi
+          GOOS=$os GOARCH=amd64 go build -o dist/cli-simulador-$VERSION-$os-amd64$EXT ./cli-simulador/cmd/simulador/main.go
+        done
+
+    - name: Criar GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
