@@ -72,17 +72,25 @@ jobs:
         VERSION=${GITHUB_REF#refs/tags/}
         mkdir -p dist
         
+        echo "Compilando Assinatura $VERSION..."
+        cd cli-assinatura
+        go mod tidy
         for os in linux windows darwin; do
           EXT=""
           if [ "$os" = "windows" ]; then EXT=".exe"; fi
-          GOOS=$os GOARCH=amd64 go build -o dist/cli-assinatura-$VERSION-$os-amd64$EXT ./cli-assinatura/cmd/assinatura/main.go
+          GOOS=$os GOARCH=amd64 go build -o ../dist/cli-assinatura-$VERSION-$os-amd64$EXT ./cmd/assinatura/main.go
         done
+        cd ..
 
+        echo "Compilando Simulador $VERSION..."
+        cd cli-simulador
+        go mod tidy
         for os in linux windows darwin; do
           EXT=""
           if [ "$os" = "windows" ]; then EXT=".exe"; fi
-          GOOS=$os GOARCH=amd64 go build -o dist/cli-simulador-$VERSION-$os-amd64$EXT ./cli-simulador/cmd/simulador/main.go
+          GOOS=$os GOARCH=amd64 go build -o ../dist/cli-simulador-$VERSION-$os-amd64$EXT ./cmd/simulador/main.go
         done
+        cd ..
 
     - name: Criar GitHub Release
       uses: softprops/action-gh-release@v1
