@@ -6,6 +6,8 @@ Este projeto é uma ferramenta de linha de comando (CLI) desenvolvida em Java pa
 
 ## 📋 1. Pré-requisitos e Configuração
 
+Atualmente o formato suportado é o PKCS12. O PKCS11 ainda está em desenvolvimento.
+
 Para executar as operações, você precisará dos seguintes arquivos em uma pasta local (ex: `C:\teste\arquivos\`):
 
 1.  **bundle.json**: O recurso FHIR Bundle (conteúdo a ser assinado).
