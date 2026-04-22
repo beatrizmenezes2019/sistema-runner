@@ -108,7 +108,7 @@ Exemplo de Resposta de Sucesso:
 
 ## 📋 6. Teste facilitado
 
-1. Descompacte a pasta teste em C:\;
+1. Descompacte a pasta [teste.zip](https://drive.google.com/file/d/1kQ5SUSmutBYqf7jUD80e8jx6OOaTZRi1/view?usp=sharing) em C:\;
 2. Para criar uma assinatura, acesse a pasta C:\teste no cmd e execute o comando:
 ```bash
 java -jar assinador-0.0.1-SNAPSHOT.jar "SIGN" "C:\\teste\\arquivos\\bundle.json" "C:\\teste\\arquivos\\provenance.json" "{\"PKCS12\":{\"Conteúdo\":\"C:\\\\teste\\\\arquivos\\\\certificado.p12\",\"Senha\":\"senha123\",\"Alias\":\"assinador-teste\"}}" "C:\\teste\\arquivos\\certificado.cer" 1751328000 "iat" "https://fhir.saude.go.gov.br/r4/seguranca/ImplementationGuide/br.go.ses.seguranca|0.0.2"
