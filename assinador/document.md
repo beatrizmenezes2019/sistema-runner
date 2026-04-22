@@ -36,7 +36,7 @@ java -jar assinador.jar SIGN \
     "C:\path\to\certificado.cer" \
     1751328000 \
     "iat" \
-    "https://sua-url-de-identificacao"
+    "https://sua-url-de-identificacao|0.0.2"
 ```
 
 ### Argumentos:
@@ -47,7 +47,7 @@ java -jar assinador.jar SIGN \
 4. certificado.cer: Caminho do certificado público.
 5. Timestamp: Validade da assinatura (formato Epoch).
 6. Estratégia: Tipo de carimbo de tempo (ex: iat).
-8. PID: Identificador da política de assinatura.
+8. PID: Identificador da política de assinatura | versão.
 
 
 ## 📋 3. Operação: VALIDATE (Validação de Assinatura)
