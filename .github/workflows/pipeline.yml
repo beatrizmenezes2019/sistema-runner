@@ -9,7 +9,6 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # JOB 1: Build das CLIs em Go
   build-go-apps:
     name: Build CLIs Go
     runs-on: ubuntu-latest
@@ -46,7 +45,6 @@ jobs:
         name: check-build-${{ matrix.app }}-${{ matrix.goos }}
         path: build/
 
-  # JOB 2: Build do Assinador (Java Maven)
   build-java-assinador:
     name: Build Assinador Java
     runs-on: ubuntu-latest
@@ -62,15 +60,16 @@ jobs:
 
     - name: Build with Maven
       working-directory: ./assinador
-      run: mvn clean package -DskipTests
+      run: |
+        mvn clean package -DskipTests
+        mv target/assinador-*.jar target/assinador.jar
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: assinador-jar
-        path: assinador/target/*.jar
+        path: assinador/target/assinador.jar
 
-  # JOB 3: Release (Consolida Go e Java)
   release:
     name: Publicar Release
     needs: [build-go-apps, build-java-assinador]
@@ -99,9 +98,7 @@ jobs:
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
         mkdir -p dist
-        # Move e renomeia os binários Go baixados para a pasta dist oficial
         cp -r temp-go/* dist/ || true
-        # Remove lixo se houver
         rm -rf temp-go
 
     - name: Criar GitHub Release
