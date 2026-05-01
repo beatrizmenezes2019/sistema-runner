@@ -92,7 +92,7 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: assinador-jar
-        path: dist/
+        path: dist/ 
 
     - name: Organizar Binários Go para Release
       run: |
@@ -102,11 +102,12 @@ jobs:
         rm -rf temp-go
 
     - name: Criar GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2  
       with:
         files: |
-          dist/*
-          dist/**/*.jar
+          dist/*.exe
+          dist/*.jar
+          dist/*-amd64
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
         draft: false
