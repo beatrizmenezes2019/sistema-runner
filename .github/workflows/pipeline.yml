@@ -9,6 +9,7 @@ on:
     branches: [ "main" ]
 
 jobs:
+  # JOB 1: Build das CLIs em Go
   build-go-apps:
     name: Build CLIs Go
     runs-on: ubuntu-latest
@@ -25,25 +26,19 @@ jobs:
       with:
         go-version: '1.22'
 
-    - name: Build Multiplataforma cli-assinatura
-      if: matrix.app == 'cli-assinatura'
+    - name: Build Multiplataforma
       working-directory: ./${{ matrix.app }}
       run: |
-        mkdir -p ../build/cli-assinatura
+        mkdir -p ../build/${{ matrix.app }}
         go mod tidy
         BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
         if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-assinatura/$BINARY_NAME ./cmd/assinatura/main.go
-
-    - name: Build Multiplataforma cli-simulador
-      if: matrix.app == 'cli-simulador'
-      working-directory: ./${{ matrix.app }}
-      run: |
-        mkdir -p ../build/cli-simulador
-        go mod tidy
-        BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
-        if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/cli-simulador/$BINARY_NAME ./cmd/simulador/main.go
+        
+        # Ajuste do caminho do main dependendo do app
+        CMD_PATH="./cmd/assinatura/main.go"
+        if [ "${{ matrix.app }}" = "cli-simulador" ]; then CMD_PATH="./cmd/simulador/main.go"; fi
+        
+        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/${{ matrix.app }}/$BINARY_NAME $CMD_PATH
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
@@ -51,9 +46,34 @@ jobs:
         name: check-build-${{ matrix.app }}-${{ matrix.goos }}
         path: build/
 
+  # JOB 2: Build do Assinador (Java Maven)
+  build-java-assinador:
+    name: Build Assinador Java
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'maven'
+
+    - name: Build with Maven
+      working-directory: ./assinador
+      run: mvn clean package -DskipTests
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: assinador-jar
+        path: assinador/target/*.jar
+
+  # JOB 3: Release (Consolida Go e Java)
   release:
     name: Publicar Release
-    needs: build-go-apps
+    needs: [build-go-apps, build-java-assinador]
     if: startsWith(github.ref, 'refs/tags/v') 
     runs-on: ubuntu-latest
     permissions:
@@ -62,40 +82,34 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
+    - name: Download Go Artifacts
+      uses: actions/download-artifact@v4
       with:
-        go-version: '1.22'
+        path: temp-go
+        pattern: check-build-*
+        merge-multiple: true
 
-    - name: Gerar Binários Oficiais para Release
+    - name: Download Java Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: assinador-jar
+        path: dist/
+
+    - name: Organizar Binários Go para Release
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
         mkdir -p dist
-        
-        echo "Compilando Assinatura $VERSION..."
-        cd cli-assinatura
-        go mod tidy
-        for os in linux windows darwin; do
-          EXT=""
-          if [ "$os" = "windows" ]; then EXT=".exe"; fi
-          GOOS=$os GOARCH=amd64 go build -o ../dist/cli-assinatura-$VERSION-$os-amd64$EXT ./cmd/assinatura/main.go
-        done
-        cd ..
-
-        echo "Compilando Simulador $VERSION..."
-        cd cli-simulador
-        go mod tidy
-        for os in linux windows darwin; do
-          EXT=""
-          if [ "$os" = "windows" ]; then EXT=".exe"; fi
-          GOOS=$os GOARCH=amd64 go build -o ../dist/cli-simulador-$VERSION-$os-amd64$EXT ./cmd/simulador/main.go
-        done
-        cd ..
+        # Move e renomeia os binários Go baixados para a pasta dist oficial
+        cp -r temp-go/* dist/ || true
+        # Remove lixo se houver
+        rm -rf temp-go
 
     - name: Criar GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/*
+        files: |
+          dist/*
+          dist/**/*.jar
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
         draft: false
