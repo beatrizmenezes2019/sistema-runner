@@ -4,6 +4,8 @@ Repositório dedicado ao desenvolvimento do sistema Runner da disciplina de Impl
 # Documentação do sistema assinador (java)
 [Processo de criação e validação das assinaturas](assinador/document.md)
 
+# Documentação do sistema cli-assinatura (Go)
+[Processo de criação e validação das assinaturas via CLI](cli-assinatura/document.md)
 
 ## 📊 Status do Projeto
 
@@ -17,12 +19,17 @@ Este projeto está em desenvolvimento ativo como parte da disciplina de Implemen
     * Build automatizado multiplataforma (Windows, Linux, macOS) para as CLIs em Go.
     * Build automatizado da aplicação Java (Maven).
     * Fluxo de publicação automática de Releases com versionamento por Tags.
+* **Implementação parcial do CLI de assinatura:**
+    * Realizada a chamada da aplicação assinador.jar através do cli-assinatura;
+    * Build automatizado dos CLIs.
+    * Fluxo de publicação automática de Releases com versionamento por Tags.
 * **Documentação Técnica:**
     * Guia de uso e parâmetros das funções `SIGN` e `VALIDATE` do `assinador.jar`.
+    * Guia de uso do CLI assinatura.
 
 ### 🛠️ O que falta fazer (Roadmap)
 * **Lógica das CLIs (Go):**
-    * Implementar o wrapper que executa o `assinador.jar` via CLI.
+    * Melhorar a usabilidade do wrapper que executa o `assinador.jar` via CLI, principalmente relacionado a captação dos parâmetros.
     * Implementar a gestão do ciclo de vida da aplicação de simulação.
 * **Chamada REST do assinador.jar:**
     * Necessário criar os endpoints de acesso ao assinador.jar para criar e validar as assinaturas. 
