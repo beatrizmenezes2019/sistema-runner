@@ -4,113 +4,183 @@ on:
   push:
     branches: [ "main" ]
     tags:
-      - 'v*' 
+      - 'v*'
   pull_request:
     branches: [ "main" ]
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Testes Go
+  # ---------------------------------------------------------------------------
+  test-go:
+    name: Testes Go — ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [cli-assinatura, cli-simulador]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Executar testes
+        working-directory: ./${{ matrix.app }}
+        run: |
+          go mod tidy
+          go test ./... -v -count=1
+
+  # ---------------------------------------------------------------------------
+  # Testes Java
+  # ---------------------------------------------------------------------------
+  test-java:
+    name: Testes Java — assinador
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Executar testes
+        working-directory: ./assinador
+        run: mvn test
+
+  # ---------------------------------------------------------------------------
+  # Build CLIs Go (multiplataforma)
+  # ---------------------------------------------------------------------------
   build-go-apps:
     name: Build CLIs Go
+    needs: test-go
     runs-on: ubuntu-latest
     strategy:
       matrix:
         goos: [linux, windows, darwin]
         app: [cli-assinatura, cli-simulador]
-    
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.22'
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
 
-    - name: Build Multiplataforma
-      working-directory: ./${{ matrix.app }}
-      run: |
-        mkdir -p ../build/${{ matrix.app }}
-        go mod tidy
-        BINARY_NAME=${{ matrix.app }}-${{ matrix.goos }}-amd64
-        if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=$BINARY_NAME.exe; fi
-        
-        # Ajuste do caminho do main dependendo do app
-        CMD_PATH="./cmd/assinatura/main.go"
-        if [ "${{ matrix.app }}" = "cli-simulador" ]; then CMD_PATH="./cmd/simulador/main.go"; fi
-        
-        GOOS=${{ matrix.goos }} GOARCH=amd64 go build -o ../build/${{ matrix.app }}/$BINARY_NAME $CMD_PATH
+      - name: Build Multiplataforma
+        working-directory: ./${{ matrix.app }}
+        run: |
+          go mod tidy
+          COMMIT=$(git rev-parse --short HEAD)
+          VERSION="${{ github.ref_name }}"
+          if [[ "$VERSION" != v* ]]; then VERSION="dev"; fi
 
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: check-build-${{ matrix.app }}-${{ matrix.goos }}
-        path: build/
+          BINARY_NAME=${{ matrix.app }}-${VERSION}-${{ matrix.goos }}-amd64
+          if [ "${{ matrix.goos }}" = "windows" ]; then BINARY_NAME=${BINARY_NAME}.exe; fi
 
+          CMD_PATH="./cmd/assinatura/main.go"
+          if [ "${{ matrix.app }}" = "cli-simulador" ]; then CMD_PATH="./cmd/simulador/main.go"; fi
+
+          # Injeta versão e commit no binário via ldflags
+          LDFLAGS="-X github.com/beatrizmenezes2019/sistema-runner/${{ matrix.app }}/internal/cli.BuildVersion=${VERSION} \
+                   -X github.com/beatrizmenezes2019/sistema-runner/${{ matrix.app }}/internal/cli.BuildCommit=${COMMIT}"
+
+          mkdir -p ../build/${{ matrix.app }}
+          GOOS=${{ matrix.goos }} GOARCH=amd64 go build \
+            -ldflags "${LDFLAGS}" \
+            -o ../build/${{ matrix.app }}/$BINARY_NAME \
+            $CMD_PATH
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.app }}-${{ matrix.goos }}
+          path: build/
+
+  # ---------------------------------------------------------------------------
+  # Build assinador.jar
+  # ---------------------------------------------------------------------------
   build-java-assinador:
     name: Build Assinador Java
+    needs: test-java
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-        cache: 'maven'
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
 
-    - name: Build with Maven
-      working-directory: ./assinador
-      run: |
-        mvn clean package -DskipTests
-        mv target/assinador-*.jar target/assinador.jar
+      - name: Build com Maven
+        working-directory: ./assinador
+        run: |
+          mvn clean package -DskipTests
+          mv target/assinador-*.jar target/assinador.jar
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: assinador-jar
-        path: assinador/target/assinador.jar
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: assinador-jar
+          path: assinador/target/assinador.jar
 
+  # ---------------------------------------------------------------------------
+  # Release (apenas em tags v*)
+  # ---------------------------------------------------------------------------
   release:
     name: Publicar Release
     needs: [build-go-apps, build-java-assinador]
-    if: startsWith(github.ref, 'refs/tags/v') 
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
-      contents: write 
-    
+      contents: write
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Download Go Artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: temp-go
-        pattern: check-build-*
-        merge-multiple: true
+      - name: Baixar artefatos Go
+        uses: actions/download-artifact@v4
+        with:
+          path: temp-build
+          pattern: build-*
+          merge-multiple: true
 
-    - name: Download Java Artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: assinador-jar
-        path: dist/ 
+      - name: Baixar artefato Java
+        uses: actions/download-artifact@v4
+        with:
+          name: assinador-jar
+          path: dist/
 
-    - name: Organizar Binários Go para Release
-      run: |
-        VERSION=${GITHUB_REF#refs/tags/}
-        mkdir -p dist
-        cp -r temp-go/* dist/ || true
-        rm -rf temp-go
+      - name: Organizar binários para release
+        run: |
+          mkdir -p dist
+          find temp-build -type f | xargs -I{} cp {} dist/ 2>/dev/null || true
+          rm -rf temp-build
 
-    - name: Criar GitHub Release
-      uses: softprops/action-gh-release@v2  
-      with:
-        files: |
-          dist/*.exe
-          dist/*.jar
-          dist/*-amd64
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gerar checksums SHA256
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publicar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/*.jar
+            dist/*-amd64
+            dist/SHA256SUMS.txt
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
