@@ -1,42 +1,76 @@
 # sistema-runner
-Repositório dedicado ao desenvolvimento do sistema Runner da disciplina de Implementação e Integração de Software.
 
-# Documentação do sistema assinador (java)
-[Processo de criação e validação das assinaturas](assinador/document.md)
+Repositório da disciplina de **Implementação e Integração de Software** — UFG.
 
-# Documentação do sistema cli-assinatura (Go)
-[Processo de criação e validação das assinaturas via CLI](cli-assinatura/document.md)
+O sistema é composto por três módulos que trabalham em conjunto para realizar a **assinatura digital e validação de documentos FHIR R4** no padrão ICP-Brasil:
 
-## 📊 Status do Projeto
+| Módulo | Tecnologia | Papel |
+|---|---|---|
+| `assinador` | Java 21 + Spring Boot 4 | Núcleo criptográfico — assina e valida via JWS |
+| `cli-assinatura` | Go 1.26 | Wrapper CLI que invoca o `assinador.jar` |
+| `cli-simulador` | Go 1.22 | CLI para iniciar o simulador do HubSaúde |
 
-Este projeto está em desenvolvimento ativo como parte da disciplina de Implementação e Integração de Software. Abaixo, detalhamos o progresso atual das entregas.
+---
 
-### ✅ O que já está pronto
-* **Assinador Core (`assinador.jar`):** * Lógica de assinatura digital seguindo os padrões do ICP-Brasil (exceto PKCS11).
-    * Validação de assinaturas e verificação de confiança via Trust Store.
-    * Saída padronizada em FHIR OperationOutcome.
-* **Infraestrutura de CI/CD (Pipeline):**
-    * Build automatizado multiplataforma (Windows, Linux, macOS) para as CLIs em Go.
-    * Build automatizado da aplicação Java (Maven).
-    * Fluxo de publicação automática de Releases com versionamento por Tags.
-* **Implementação parcial do CLI de assinatura:**
-    * Realizada a chamada da aplicação assinador.jar através do cli-assinatura;
-    * Build automatizado dos CLIs.
-    * Fluxo de publicação automática de Releases com versionamento por Tags.
-* **Documentação Técnica:**
-    * Guia de uso e parâmetros das funções `SIGN` e `VALIDATE` do `assinador.jar`.
-    * Guia de uso do CLI assinatura.
+## Documentação dos Módulos
 
-### 🛠️ O que falta fazer (Roadmap)
-* **Lógica das CLIs (Go):**
-    * Melhorar a usabilidade do wrapper que executa o `assinador.jar` via CLI, principalmente relacionado a captação dos parâmetros.
-    * Implementar a gestão do ciclo de vida da aplicação de simulação.
-* **Chamada REST do assinador.jar:**
-    * Necessário criar os endpoints de acesso ao assinador.jar para criar e validar as assinaturas. 
-* **Integração PKCS11:**
-    * Finalizar a lógica de comunicação com hardwares (Tokens/Smartcards) no Assinador.
-* **Qualidade e Testes:**
-    * Implementação de testes unitários para o core do assinador.
-    * Criação de testes automatizados para a pipeline de validação.
-* **Documentação Geral:**
-    * Manual de instalação do ecossistema completo e visão arquitetural do projeto.
+- [Assinador Java — operações SIGN e VALIDATE](assinador/document.md)
+- [CLI Assinatura — guia de uso](cli-assinatura/document.md)
+- [CLI Simulador — guia de uso](cli-simulador/document.md)
+
+---
+
+## Status do Projeto
+
+### O que já está implementado
+
+**Assinador (`assinador.jar`)**
+- Operação `SIGN`: lê Bundle + Provenance FHIR, extrai chave privada de PKCS12, gera JWS compacto (RS256) e retorna `OperationOutcome` FHIR R4.
+- Operação `VALIDATE`: aceita JWS compacto ou `OperationOutcome` JSON, verifica assinatura criptográfica (RS256), checa Trust Store via SHA-256 do certificado raiz, consulta revogação por OCSP e CRL.
+- Suporte a material criptográfico: **PKCS12** (arquivo ou Base64) e estrutura para TOKEN/SMARTCARD (PKCS11 parcial).
+- Validação antecipada de parâmetros (`SignatureParamsValidation`) com mensagens de erro e dicas de correção.
+- Saída padronizada em FHIR R4 `OperationOutcome` em todos os cenários (sucesso e erro).
+- **Testes unitários** cobrindo toda a lógica de validação de parâmetros (`SignatureParamsValidationTest`) e carregamento do contexto Spring (`AssinadorApplicationTests`).
+
+**CLI Assinatura (`cli-assinatura`)**
+- Comando `sign` com flags tipadas e obrigatórias validadas pelo Cobra: `--bundle`, `--provenance`, `--config`, `--cert`, `--timestamp`, `--estrategia`, `--pid`.
+- Comando `validate` com flags `--jws` e `--config`.
+- Comando `version` com versão e commit injetados via `ldflags` no build.
+- Localização automática do `assinador.jar` em quatro fontes (flag `--jar`, variável de ambiente, `~/.hubsaude/`, diretório atual).
+- Localização automática do `java` via `JAVA_HOME` ou `PATH`.
+- Flag global `--verbose` para diagnóstico e `--jar` para caminho explícito.
+- Testes unitários para `resolveJar` e `resolveJava`.
+
+**CLI Simulador (`cli-simulador`)**
+- Comando `start`: inicia o `simulador.jar` em background via `exec.Command` e exibe o PID do processo.
+- Comando `version`.
+
+**Pipeline CI/CD (GitHub Actions)**
+- Testes automatizados Go (`cli-assinatura`) e Java (`assinador`) a cada push/PR na `main`.
+- Build cross-platform (Linux, Windows, macOS/amd64) para ambas as CLIs.
+- Build do `assinador.jar` com Maven.
+- Publicação automática de GitHub Release em tags `v*`, incluindo binários, JAR e arquivo `SHA256SUMS.txt`.
+
+---
+
+### O que falta fazer (Roadmap)
+
+**Assinador**
+- Implementar PKCS11 completo (comunicação real com Tokens e Smartcards via SunPKCS11).
+- Implementar endpoints REST (`spring-boot-starter-restclient`) para expor `SIGN` e `VALIDATE` como API HTTP, eliminando a dependência exclusiva da linha de comando.
+- Implementar OCSP real (atualmente o stub retorna sempre `GOOD`).
+- Ampliar cobertura de testes: testes de integração para `SignatureService` com certificados de teste.
+
+**CLI Assinatura**
+- Melhorar usabilidade: modo interativo para entrada da senha do PKCS12 sem expô-la no histórico do shell.
+- Suporte ao modo servidor (chamar a API REST quando o assinador estiver rodando como serviço, sem necessidade do JAR local).
+
+**CLI Simulador**
+- Implementar comando `stop` para encerrar o processo iniciado pelo `start`.
+- Implementar comando `status` para verificar se o simulador está rodando.
+- Gerenciamento de PID (gravar e recuperar o PID do processo em arquivo).
+- Implementar `logs` para acompanhar a saída do simulador em tempo real.
+
+**Geral**
+- Documentação de instalação end-to-end (pré-requisitos, download dos binários da Release, configuração do ambiente).
+- Diagrama arquitetural do ecossistema completo.
