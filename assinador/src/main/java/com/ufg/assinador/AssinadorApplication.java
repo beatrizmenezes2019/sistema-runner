@@ -12,35 +12,53 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class AssinadorApplication implements CommandLineRunner {
 
-	@Autowired
-	private SignatureService engine;
+    @Autowired
+    private SignatureService engine;
 
-	@Autowired
-	private SignatureParamsValidation paramsValidation;
+    @Autowired
+    private SignatureParamsValidation paramsValidation;
 
-	public static void main(String[] args) {
-		SpringApplication.run(AssinadorApplication.class, args);
-	}
+    public static void main(String[] args) {
+        System.setProperty("spring.main.banner-mode", "off");
+        System.setProperty("logging.level.root", "OFF");
+        SpringApplication.run(AssinadorApplication.class, args);
+    }
 
-	@Override
-	public void run(String @NonNull ... args) {
+    @Override
+    public void run(String @NonNull ... args) {
+        if (args.length == 0) {
+            System.err.println("[ERRO] Nenhum argumento fornecido.");
+            System.err.println("[USO]  java -jar assinador.jar SIGN <bundle> <provenance> <config-cripto-json> <cert> <timestamp> <estrategia> <pid>");
+            System.err.println("       java -jar assinador.jar VALIDATE <jws> <config-json>");
+            System.exit(2);
+        }
 
-		String result = "";
+        Operations op = paramsValidation.signatureParams(args);
 
-		Operations op = paramsValidation.signatureParams(args);
-		switch (op) {
-			case SIGN -> {
-				if(paramsValidation.createSignatureParams(args))
-					result = engine.generateSignature(args);
-			}
-			case VALIDATE -> {
-				if(paramsValidation.validateSignatureParams(args))
-					result = engine.validate(args);
-			}
-		}
+        String result;
+        switch (op) {
+            case SIGN -> {
+                if (!paramsValidation.createSignatureParams(args)) {
+                    System.exit(2);
+                }
+                result = engine.generateSignature(args);
+            }
+            case VALIDATE -> {
+                if (!paramsValidation.validateSignatureParams(args)) {
+                    System.exit(2);
+                }
+                result = engine.validate(args);
+            }
+            default -> {
+                System.exit(2);
+                return;
+            }
+        }
 
+        System.out.print(result);
 
-		System.out.print(result);
-	}
-
+        if (result != null && result.contains("\"fatal\"")) {
+            System.exit(1);
+        }
+    }
 }
