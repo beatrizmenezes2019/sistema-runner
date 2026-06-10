@@ -84,10 +84,14 @@ func TestResolveJava_JavaHome(t *testing.T) {
 	// Cria um "java" fake dentro de um diretório temporário simulando JAVA_HOME
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
-	os.MkdirAll(binDir, 0755)
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
 
 	javaExe := filepath.Join(binDir, javaBinary())
-	os.WriteFile(javaExe, []byte("#!/bin/sh\necho java"), 0755)
+	if err := os.WriteFile(javaExe, []byte("#!/bin/sh\necho java"), 0755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	t.Setenv("JAVA_HOME", dir)
 

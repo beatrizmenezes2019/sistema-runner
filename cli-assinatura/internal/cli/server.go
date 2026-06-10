@@ -154,7 +154,7 @@ func startServer(port, timeoutMinutes int) (*serverState, error) {
 	}
 
 	// Timeout: encerra o processo que não ficou pronto
-	cmd.Process.Kill()
+	_ = cmd.Process.Kill()
 	clearState()
 	return nil, fmt.Errorf(
 		"assinador.jar não ficou pronto em %s na porta %d.\n"+
@@ -200,9 +200,9 @@ func stopServer(port int) error {
 		proc, err := os.FindProcess(state.PID)
 		if err == nil {
 			if runtime.GOOS == "windows" {
-				proc.Kill()
+				_ = proc.Kill()
 			} else {
-				proc.Signal(syscall.SIGTERM)
+				_ = proc.Signal(syscall.SIGTERM)
 			}
 		}
 	}

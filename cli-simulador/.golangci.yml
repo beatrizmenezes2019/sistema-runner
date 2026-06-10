@@ -7,8 +7,8 @@ linters:
     - staticcheck
     - unused
     - gofmt
-    - misspell
     - bodyclose
+    # misspell removido: codebase em português gera falsos positivos
 
 linters-settings:
   errcheck:

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -212,14 +211,3 @@ func extractPort(t *testing.T, url string) int {
 	return port
 }
 
-// unusedPort retorna uma porta TCP livre no sistema.
-func unusedPort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("não foi possível encontrar porta livre: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-	return port
-}

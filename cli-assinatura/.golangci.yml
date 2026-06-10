@@ -7,8 +7,8 @@ linters:
     - staticcheck    # conjunto amplo de verificações estáticas
     - unused         # símbolos não utilizados
     - gofmt          # formatação padrão
-    - misspell       # erros de ortografia em comentários
     - bodyclose      # verifica se http.Response.Body é fechado
+    # misspell removido: codebase em português gera falsos positivos (comando, operacional, etc.)
 
 linters-settings:
   errcheck:
