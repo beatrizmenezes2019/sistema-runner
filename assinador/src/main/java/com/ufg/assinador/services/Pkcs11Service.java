@@ -46,8 +46,12 @@ public class Pkcs11Service {
      * @return true se o provider foi carregado e o token autenticado com sucesso
      */
     public boolean isTokenAvailable(String library, String slot, String pin) {
+        Provider provider = null;
         try {
-            Provider provider = buildProvider(library, slot);
+            provider = buildProvider(library, slot);
+            // Remove versão anterior com o mesmo nome (caso exista de chamada anterior)
+            // para garantir que ks.load() autentica de novo com o PIN informado.
+            Security.removeProvider(provider.getName());
             Security.addProvider(provider);
 
             KeyStore ks = KeyStore.getInstance("PKCS11", provider);
@@ -56,6 +60,11 @@ public class Pkcs11Service {
             return true;
         } catch (Exception e) {
             return false;
+        } finally {
+            // Sempre remove o provider para não poluir o contexto global da JVM.
+            if (provider != null) {
+                Security.removeProvider(provider.getName());
+            }
         }
     }
 
@@ -72,8 +81,10 @@ public class Pkcs11Service {
      */
     public byte[] sign(byte[] data, String library, String slot, String pin, String alias)
             throws Pkcs11Exception {
+        Provider provider = null;
         try {
-            Provider provider = buildProvider(library, slot);
+            provider = buildProvider(library, slot);
+            Security.removeProvider(provider.getName());
             Security.addProvider(provider);
 
             KeyStore ks = KeyStore.getInstance("PKCS11", provider);
@@ -97,6 +108,10 @@ public class Pkcs11Service {
             throw new Pkcs11Exception(
                 "Erro ao assinar com token PKCS#11: " + e.getMessage() +
                 "\nComo resolver: verifique se o token está conectado e a biblioteca está correta.", e);
+        } finally {
+            if (provider != null) {
+                Security.removeProvider(provider.getName());
+            }
         }
     }
 

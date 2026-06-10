@@ -1,6 +1,3 @@
-run:
-  go: "1.24"   # versão de linguagem usada na análise; evita conflito com golangci-lint < go1.26
-
 linters:
   enable:
     - errcheck
