@@ -25,6 +25,7 @@ Basta baixar o executável certo para o seu sistema (Windows, Linux ou macOS) e 
 - [Como assinar e validar documentos digitais (cli-assinatura)](cli-assinatura/document.md)
 - [Como usar o simulador do HubSaúde (cli-simulador)](cli-simulador/document.md)
 - [Referência técnica do motor de assinatura (assinador)](assinador/document.md)
+- [Decisões arquiteturais (ADRs)](docs/adr/)
 
 ---
 
@@ -33,14 +34,33 @@ Basta baixar o executável certo para o seu sistema (Windows, Linux ou macOS) e 
 Os executáveis prontos para uso estão disponíveis na aba [**Releases**](../../releases) do repositório.
 
 Cada release inclui:
-- `cli-assinatura-*-linux-amd64` — CLI de assinatura para Linux
-- `cli-assinatura-*-windows-amd64.exe` — CLI de assinatura para Windows
-- `cli-assinatura-*-darwin-amd64` — CLI de assinatura para macOS
-- `cli-simulador-*-linux-amd64` — CLI do simulador para Linux
-- `cli-simulador-*-windows-amd64.exe` — CLI do simulador para Windows
-- `cli-simulador-*-darwin-amd64` — CLI do simulador para macOS
-- `assinador.jar` — motor de assinatura Java (necessário para a cli-assinatura funcionar)
-- `SHA256SUMS.txt` — checksums para verificar a integridade dos arquivos
+
+| Arquivo | Descrição |
+|---|---|
+| `cli-assinatura-*-linux-amd64` | CLI de assinatura para Linux |
+| `cli-assinatura-*-windows-amd64.exe` | CLI de assinatura para Windows |
+| `cli-assinatura-*-darwin-amd64` | CLI de assinatura para macOS |
+| `cli-simulador-*-linux-amd64` | CLI do simulador para Linux |
+| `cli-simulador-*-windows-amd64.exe` | CLI do simulador para Windows |
+| `cli-simulador-*-darwin-amd64` | CLI do simulador para macOS |
+| `assinador.jar` | Motor de assinatura Java (necessário para o cli-assinatura) |
+| `SHA256SUMS.txt` | Checksums SHA-256 para verificar a integridade dos arquivos |
+| `*.sig` / `*.pem` | Assinaturas Cosign para verificação de autenticidade |
+
+### Verificar integridade e autenticidade
+
+```bash
+# Verificar checksum SHA-256
+sha256sum -c SHA256SUMS.txt
+
+# Verificar assinatura Cosign (requer cosign instalado)
+cosign verify-blob \
+  --signature cli-assinatura-v1.0.0-linux-amd64.sig \
+  --certificate cli-assinatura-v1.0.0-linux-amd64.pem \
+  --certificate-identity-regexp "https://github.com/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  cli-assinatura-v1.0.0-linux-amd64
+```
 
 ---
 
@@ -49,62 +69,58 @@ Cada release inclui:
 ### ✅ O que já está funcionando
 
 **Motor de assinatura (`assinador.jar`)**
-- Operação `SIGN`: lê os arquivos de documento (bundle + provenance), gera uma assinatura digital no formato JWS JSON Serialization conforme o padrão ICP-Brasil e retorna um recurso FHIR `Signature`.
-- Operação `VALIDATE`: recebe uma assinatura, verifica sua estrutura e retorna `OperationOutcome` com resultado da validação.
-- Modo simulado: a criação de assinatura não exige uma chave criptográfica real — útil para testes e desenvolvimento.
-- Validação antecipada de parâmetros: mensagens de erro claras indicando o que está errado e como corrigir.
-- Modo servidor HTTP: pode rodar como serviço REST com endpoints `/sign`, `/validate`, `/health` e `/shutdown`.
-- Auto-shutdown por inatividade (configurável por variável de ambiente).
-- Testes automatizados cobrindo validação de parâmetros e endpoints HTTP.
+- Operação `SIGN`: gera assinatura digital no formato JWS JSON Serialization (ICP-Brasil) e retorna recurso FHIR `Signature`.
+- Operação `VALIDATE`: verifica a estrutura da assinatura e retorna `OperationOutcome`.
+- Modo simulado: estrutura criptográfica correta sem exigir chave privada real (adequado para desenvolvimento e testes).
+- Suporte a PKCS#11 via `SunPKCS11`: integração com tokens físicos (smart cards, e-tokens) e simulador SoftHSM2.
+- Validação antecipada de parâmetros com mensagens de erro claras (o quê, por quê e como resolver).
+- Modo servidor HTTP com endpoints `/sign`, `/validate`, `/health` e `/shutdown`.
+- Auto-shutdown por inatividade (configurável via `ASSINADOR_TIMEOUT_MINUTOS`).
+- Testes automatizados: validação de parâmetros, endpoints HTTP, integração PKCS#11.
+- Relatório de cobertura com JaCoCo publicado como artefato de CI.
 
 **CLI de assinatura (`cli-assinatura`)**
-- Comando `sign`: assina um documento com todos os parâmetros necessários.
-- Comando `validate`: valida uma assinatura existente.
-- Comando `start`: inicia o `assinador.jar` em modo servidor (HTTP) em background.
-- Comando `stop`: encerra o servidor.
-- Comando `status`: verifica se o servidor está rodando e respondendo.
-- Comando `version`: exibe a versão atual.
-- **Instalação automática do Java 21**: se Java não estiver instalado na máquina, o CLI faz o download e configura automaticamente.
-- Localização automática do `assinador.jar` (flag `--jar`, variável de ambiente, pasta `~/.hubsaude/`, pasta atual).
-- Flag `--verbose` para diagnóstico detalhado.
-- Testes automatizados de localização do JAR e do Java.
+- Comandos `sign`, `validate`, `start`, `stop`, `status`, `version`.
+- Detecção de instância ativa via health check real (não apenas "porta ocupada").
+- Instalação automática do Java 21 Temurin se não estiver disponível.
+- Localização automática do `assinador.jar` (flag `--jar`, variável de ambiente, `~/.hubsaude/`, pasta atual).
+- Logging estruturado via `slog`: nível INFO por padrão, DEBUG com `--verbose`.
+- Testes de cenários negativos: JAR ausente, porta ocupada por outro serviço, servidor lento, estado corrompido.
+- Lint obrigatório via `golangci-lint` no CI.
+- Relatório de cobertura publicado como artefato de CI.
 
 **CLI do simulador (`cli-simulador`)**
-- Comando `start`: baixa automaticamente o JAR do simulador HubSaúde (se não existir), inicia o processo em background e aguarda o servidor estar pronto para receber requisições.
-- Comando `stop`: encerra o simulador de forma controlada.
-- Comando `status`: verifica o estado do simulador (pronto / inicializando / parado) com health check real.
-- Comando `version`: exibe a versão atual.
-- **Download automático do JAR** do simulador: não é necessário baixar o arquivo manualmente.
-- **Instalação automática do Java 21**: igual ao `cli-assinatura`.
-- Gerenciamento de PID em arquivo (`~/.hubsaude/simulador.pid`).
-- Log do simulador salvo em `~/.hubsaude/simulador.log`.
+- Comandos `start`, `stop`, `status`, `version`.
+- Download automático do JAR do simulador com verificação de integridade SHA-256.
+- Instalação automática do Java 21 Temurin se necessário.
+- Health check real antes de declarar o servidor pronto.
+- Gerenciamento de PID em `~/.hubsaude/simulador.pid`.
+- Log do simulador em `~/.hubsaude/simulador.log`.
+- Logging estruturado via `slog`.
 
 **Pipeline CI/CD (GitHub Actions)**
-- Testes automáticos a cada push/PR na branch `main`.
-- Testes em Linux **e Windows** (portabilidade comprovada em CI).
+- Lint Go (`golangci-lint`) em Linux — bloqueia build se houver violação de estilo.
+- Testes automáticos em Linux e Windows (portabilidade comprovada em CI).
+- Testes Java com SoftHSM2 instalado (integração PKCS#11 validada em CI).
+- Cobertura publicada como artefato: `go test -coverprofile` e JaCoCo.
 - Build multiplataforma: Linux, Windows e macOS para ambas as CLIs.
-- Build do `assinador.jar` com Maven.
-- Publicação automática de Release ao criar uma tag `v*`, com binários e checksums SHA256.
+- Publicação automática de Release ao criar tag `v*`, com checksums SHA-256 e assinaturas Cosign.
+
+**Decisões Arquiteturais Documentadas (ADRs)**
+- [ADR-001](docs/adr/ADR-001-go-para-clis.md): Go como linguagem dos CLIs
+- [ADR-002](docs/adr/ADR-002-modo-simulado-sem-rsa-real.md): Modo simulado sem RSA real
+- [ADR-003](docs/adr/ADR-003-gerenciamento-ciclo-de-vida-via-arquivo-estado.md): Estado em `~/.hubsaude/` + health check
+- [ADR-004](docs/adr/ADR-004-porta-padrao-8080.md): Porta padrão 8080
+- [ADR-005](docs/adr/ADR-005-provisionamento-jdk-temurin.md): Provisionamento de JDK via Adoptium Temurin
 
 ---
 
-### 🚧 O que ainda está sendo desenvolvido (Roadmap)
+### 🚧 O que ainda pode ser evoluído
 
-**Motor de assinatura**
-- Assinatura criptográfica real com chave privada PKCS12 (atualmente simulada).
-- Suporte completo a tokens e smartcards (PKCS11).
+- Assinatura RSA real com chave privada PKCS#12 (atualmente o valor simulado é SHA-256, não RSA).
 - Consulta de revogação de certificados via OCSP real.
-- Ampliar cobertura de testes com certificados de teste reais.
-
-**CLI de assinatura**
-- Modo interativo para digitar senha do PKCS12 sem expô-la no histórico do terminal.
-
-**CLI do simulador**
-- Comando `logs`: exibir os logs do simulador em tempo real.
-- Testes automatizados dos comandos start/stop/status.
-
-**Geral**
-- Diagrama arquitetural atualizado.
+- Modo interativo para digitar PIN do token sem expô-lo no histórico do terminal.
+- Comando `simulador logs`: exibir os logs em tempo real.
 - Guia de instalação end-to-end com screenshots.
 
 ---
@@ -113,12 +129,16 @@ Cada release inclui:
 
 ```
 sistema-runner/
-├── assinador/          # Motor de assinatura (Java 21 + Spring Boot)
-├── cli-assinatura/     # CLI para assinar/validar documentos (Go)
-├── cli-simulador/      # CLI para gerenciar o simulador HubSaúde (Go)
+├── assinador/                  # Motor de assinatura (Java 21 + Spring Boot)
+├── cli-assinatura/             # CLI para assinar/validar documentos (Go)
+│   └── .golangci.yml           # Configuração do lint
+├── cli-simulador/              # CLI para gerenciar o simulador HubSaúde (Go)
+│   └── .golangci.yml           # Configuração do lint
+├── docs/
+│   └── adr/                    # Architecture Decision Records
 ├── .github/
 │   └── workflows/
-│       └── pipeline.yml   # Pipeline CI/CD (GitHub Actions)
+│       └── pipeline.yml        # Pipeline CI/CD completo
 ├── .gitattributes
 ├── .gitignore
 ├── LICENSE
@@ -132,17 +152,25 @@ sistema-runner/
 Para compilar e testar localmente, você precisa de **Java 21** e **Go 1.22+** instalados.
 
 ```bash
-# Compilar o motor de assinatura
+# Compilar e testar o motor de assinatura
 cd assinador
-mvn clean package
+mvn clean package       # compila e gera o JAR
+mvn test                # executa os testes
+mvn test jacoco:report  # executa testes + relatório de cobertura (target/site/jacoco/)
 
 # Compilar a CLI de assinatura
 cd cli-assinatura
 go build -o assinatura ./cmd/assinatura/main.go
+go test ./... -v -coverprofile=coverage.out
 
 # Compilar a CLI do simulador
 cd cli-simulador
 go build -o simulador ./cmd/simulador/main.go
+go test ./... -v -coverprofile=coverage.out
+
+# Executar lint Go (requer golangci-lint instalado)
+cd cli-assinatura && golangci-lint run
+cd cli-simulador  && golangci-lint run
 ```
 
 ---

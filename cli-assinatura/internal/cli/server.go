@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -140,7 +141,7 @@ func startServer(port, timeoutMinutes int) (*serverState, error) {
 
 	if err := writeState(state); err != nil {
 		// Não fatal — servidor subiu, mas não conseguimos salvar o estado
-		fmt.Fprintf(os.Stderr, "[aviso] Não foi possível salvar estado em %s: %v\n", statePath(), err)
+		slog.Warn("não foi possível salvar estado", "path", statePath(), "error", err)
 	}
 
 	// Aguarda o servidor estar pronto

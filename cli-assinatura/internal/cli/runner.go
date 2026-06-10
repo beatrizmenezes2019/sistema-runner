@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,9 +31,7 @@ func resolveJar() (string, error) {
 			continue
 		}
 		if _, err := os.Stat(c.path); err == nil {
-			if verbose {
-				fmt.Fprintf(os.Stderr, "[verbose] assinador.jar encontrado via %s: %s\n", c.source, c.path)
-			}
+			slog.Debug("assinador.jar encontrado", "source", c.source, "path", c.path)
 			return c.path, nil
 		}
 	}
@@ -69,9 +68,7 @@ func runJar(operation string, params []string) error {
 
 	allArgs := append([]string{"-jar", jar, operation}, params...)
 
-	if verbose {
-		fmt.Fprintf(os.Stderr, "[verbose] Executando: %s %s\n", java, strings.Join(allArgs, " "))
-	}
+	slog.Debug("executando assinador", "java", java, "args", strings.Join(allArgs, " "))
 
 	cmd := exec.Command(java, allArgs...)
 	cmd.Stdout = os.Stdout

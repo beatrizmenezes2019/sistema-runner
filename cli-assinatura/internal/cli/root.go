@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -51,6 +52,21 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&jarPath, "jar", "", "Caminho explícito para o assinador.jar")
 	rootCmd.PersistentFlags().BoolVar(&useLocal, "local", false, "Forçar modo local (java -jar) em vez do servidor HTTP")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Exibir saída de diagnóstico detalhada")
+
+	// Configura slog: nível INFO por padrão, DEBUG com --verbose
+	cobra.OnInitialize(setupLogger)
+}
+
+// setupLogger configura o logger estruturado (slog) de acordo com a flag --verbose.
+// Eventos de ciclo de vida (start, stop, health check) são emitidos via slog para stderr.
+// A saída do usuário (resultado do JAR) vai para stdout e não usa slog.
+func setupLogger() {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(handler))
 }
 
 func Execute() error {

@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,6 +20,8 @@ import (
 const (
 	// URL oficial do JAR do simulador HubSaúde.
 	simuladorJarURL = "https://github.com/kyriosdata/runner/releases/download/hubsaude-validador-api-v0.1.10/hubsaude-validador-api-0.1.10-exec.jar"
+	// URL do arquivo SHA-256 publicado junto com o JAR.
+	simuladorJarSHA256URL = "https://github.com/kyriosdata/runner/releases/download/hubsaude-validador-api-v0.1.10/hubsaude-validador-api-0.1.10-exec.jar.sha256"
 	// Nome local do JAR após download.
 	simuladorJarName = "hubsaude-validador-api.jar"
 	// Arquivo que armazena o PID do processo em execução.
@@ -108,7 +113,7 @@ func runStart() error {
 
 	pid := proc.Process.Pid
 	if err := writePID(pid); err != nil {
-		fmt.Fprintf(os.Stderr, "[warn] Não foi possível salvar PID: %v\n", err)
+		slog.Warn("não foi possível salvar PID", "error", err)
 	}
 
 	fmt.Printf("[info] Simulador iniciado (PID %d). Aguardando readiness na porta %s...\n", pid, simuladorPort)
@@ -153,12 +158,64 @@ func resolveSimuladorJar() (string, error) {
 		return "", fmt.Errorf("download do JAR: %w", err)
 	}
 
+	// Verificar integridade via SHA-256 (se disponível)
+	if err := verifyJarChecksum(tmpPath, simuladorJarSHA256URL); err != nil {
+		return "", fmt.Errorf("verificação de integridade do JAR falhou: %w\n"+
+			"Como resolver: use --source para especificar outra URL ou remova %s e tente novamente.", err, tmpPath)
+	}
+
 	if err := os.Rename(tmpPath, jarPath); err != nil {
 		return "", fmt.Errorf("salvar JAR em %s: %w", jarPath, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "[info] JAR salvo em: %s\n", jarPath)
 	return jarPath, nil
+}
+
+// verifyJarChecksum baixa o arquivo .sha256 e compara com o hash do arquivo local.
+// Se o arquivo .sha256 não estiver disponível, emite aviso mas não falha.
+func verifyJarChecksum(localPath, sha256URL string) error {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(sha256URL) //nolint:gosec
+	if err != nil {
+		slog.Warn("arquivo de checksum não disponível, continuando sem verificação", "error", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Warn("checksum não disponível, continuando sem verificação", "status", resp.StatusCode)
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Warn("erro ao ler checksum remoto, continuando sem verificação", "error", err)
+		return nil
+	}
+
+	// Formato esperado: "<hex>  <nome-do-arquivo>" ou apenas "<hex>"
+	expectedHex := strings.TrimSpace(strings.Fields(string(body))[0])
+
+	// Calcular SHA-256 do arquivo baixado
+	f, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("abrir arquivo para verificação: %w", err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("calcular hash do arquivo: %w", err)
+	}
+	actualHex := hex.EncodeToString(h.Sum(nil))
+
+	if !strings.EqualFold(actualHex, expectedHex) {
+		return fmt.Errorf("SHA-256 divergente:\n  esperado: %s\n  obtido:   %s", expectedHex, actualHex)
+	}
+
+	slog.Debug("SHA-256 verificado", "hash", actualHex)
+	return nil
 }
 
 // downloadJarFile baixa um arquivo de url para destPath.
