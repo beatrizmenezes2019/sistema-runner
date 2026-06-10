@@ -1,129 +1,178 @@
-# CLI Simulador
+# CLI do Simulador HubSaúde
 
-Ferramenta de linha de comando desenvolvida em **Go 1.22** para gerenciar o ciclo de vida do simulador do HubSaúde. O binário compilado é multiplataforma (Linux, Windows, macOS) e funciona sem instalação adicional.
+Esta ferramenta permite **iniciar, parar e verificar** o servidor simulador do HubSaúde diretamente pelo terminal, sem precisar baixar ou configurar nada manualmente.
 
-> **Estado atual:** implementação inicial. Os comandos `start` e `version` estão disponíveis. A gestão completa do ciclo de vida (stop, status, logs) está no roadmap.
+> Funciona em **Windows**, **Linux** e **macOS**.
+
+---
+
+## O que é o simulador?
+
+O simulador reproduz o comportamento do servidor HubSaúde em ambiente local, permitindo testar integrações sem acessar o ambiente de produção. É a ferramenta ideal para desenvolvimento e testes.
 
 ---
 
 ## Instalação
 
-Baixe o binário correspondente ao seu sistema na aba **Releases** do repositório ou compile localmente:
+### 1. Baixe o executável
 
-```bash
-cd cli-simulador
-go build -o simulador ./cmd/simulador/main.go          # Linux/macOS
-GOOS=windows go build -o simulador.exe ./cmd/simulador/main.go  # Windows (cross-compile)
-```
+Acesse a aba [**Releases**](../../releases) do repositório e baixe o arquivo correto para o seu sistema:
 
-Coloque o binário e o `simulador.jar` no mesmo diretório de trabalho.
+| Sistema | Arquivo para baixar |
+|---|---|
+| Windows | `cli-simulador-*-windows-amd64.exe` |
+| Linux | `cli-simulador-*-linux-amd64` |
+| macOS | `cli-simulador-*-darwin-amd64` |
+
+### 2. Nada mais é necessário!
+
+- **O arquivo do simulador é baixado automaticamente** na primeira vez que você executar o comando `start`.
+- **Java é instalado automaticamente** caso não esteja presente no seu computador.
 
 ---
 
-## Pré-requisito
+## Como usar
 
-O simulador requer Java instalado e o arquivo `simulador.jar` presente no **diretório de trabalho atual** ao executar o comando `start`.
+Abra o terminal (Prompt de Comando no Windows, Terminal no Linux/macOS) na pasta onde salvou o executável.
 
 ---
 
-## Comandos
+### Iniciar o simulador (`start`)
 
-### `start` — Iniciar o Simulador
+Liga o servidor do simulador em background. O comando aguarda o servidor ficar completamente pronto antes de retornar.
 
-Inicia o `simulador.jar` como um processo filho em background e exibe o PID atribuído pelo sistema operacional.
-
-**Sintaxe:**
 ```bash
-simulador start
+# No Windows
+.\simulador.exe start
+
+# No Linux / macOS
+./simulador start
 ```
 
-**Comportamento:**
-- Executa `java -jar simulador.jar` em modo não-bloqueante (`cmd.Start()`).
-- O processo do simulador continua rodando após o CLI retornar.
-- Exibe o PID do processo iniciado para que possa ser encerrado manualmente se necessário.
+**Com porta personalizada:**
+```bash
+.\simulador.exe start --port 9090
+```
+
+**O que acontece automaticamente:**
+1. Verifica se o Java está instalado — se não estiver, baixa e configura o Java 21.
+2. Verifica se o arquivo do simulador existe — se não existir, faz o download.
+3. Verifica se o simulador já está rodando — se estiver, reaproveita a instância existente.
+4. Inicia o servidor e aguarda até que esteja pronto para receber requisições.
 
 **Exemplo de saída:**
 ```
-Simulador iniciado com sucesso! PID: 12345
-Use 'simulador stop' para encerrar.
-```
-
-**Atenção:** O comando `stop` ainda não está implementado. Para encerrar o simulador manualmente, use o PID exibido:
-
-```bash
-# Linux / macOS
-kill 12345
-
-# Windows
-taskkill /PID 12345 /F
+[info] Simulador iniciado (PID 12345). Aguardando readiness na porta 8080...
+[info] Simulador pronto e respondendo na porta 8080.
 ```
 
 ---
 
-### `version` — Versão do CLI
+### Verificar o estado do simulador (`status`)
 
-Exibe a versão atual do CLI do simulador.
+Mostra se o simulador está rodando e respondendo normalmente.
 
 ```bash
-simulador version
-# Saída: Sistema Runner CLI Simulador - Versão: 0.1.0
+.\simulador.exe status
+.\simulador.exe status --port 9090
+```
+
+**Possíveis resultados:**
+
+```
+STATUS: PRONTO
+  PID   : 12345
+  Porta : 8080
+  Health: OK (http://localhost:8080/health)
+```
+
+```
+STATUS: PROCESSO EM EXECUÇÃO, MAS NÃO RESPONDE
+  PID   : 12345
+  Porta : 8080
+  Health: FALHOU
+  Dica  : O simulador pode estar ainda inicializando. Aguarde ou execute 'simulador stop' e tente novamente.
+```
+
+```
+STATUS: PARADO
+  Nenhuma instância registrada em ~/.hubsaude/simulador.pid
 ```
 
 ---
 
-## Exit Codes
+### Parar o simulador (`stop`)
 
-| Código | Significado |
+Encerra o servidor do simulador que está rodando em background.
+
+```bash
+.\simulador.exe stop
+```
+
+**Exemplo de saída:**
+```
+[info] Simulador (PID 12345) encerrado com sucesso.
+```
+
+---
+
+### Ver a versão instalada (`version`)
+
+```bash
+.\simulador.exe version
+# Exemplo de saída: simulador v1.2.0 (commit abc1234)
+```
+
+---
+
+## Opções globais
+
+| Opção | O que faz |
 |---|---|
-| `0` | Comando executado com sucesso |
-| `1` | Erro fatal (ex.: `simulador.jar` não encontrado ou sem permissão de execução) |
+| `--verbose` | Exibe informações extras de diagnóstico — útil para entender o que está acontecendo em caso de erro |
 
 ---
 
-## Estrutura do Projeto
+## Arquivos gerados automaticamente
 
-```
-cli-simulador/
-├── cmd/
-│   └── simulador/
-│       └── main.go          # ponto de entrada
-├── internal/
-│   └── cli/
-│       ├── root.go          # comando raiz
-│       ├── start.go         # comando start
-│       └── version.go       # comando version
-├── go.mod
-└── go.sum
-```
+O simulador utiliza a pasta `~/.hubsaude/` para guardar seus arquivos:
+
+| Arquivo | O que é |
+|---|---|
+| `~/.hubsaude/hubsaude-validador-api.jar` | O servidor do simulador (baixado automaticamente) |
+| `~/.hubsaude/simulador.pid` | O número identificador do processo em execução |
+| `~/.hubsaude/simulador.log` | O registro de saída do simulador |
+| `~/.hubsaude/jdk/` | O Java instalado automaticamente (se necessário) |
+
+> No Windows, `~` equivale à pasta do seu usuário, por exemplo: `C:\Users\seu-nome\.hubsaude\`
 
 ---
 
-## Build Multiplataforma
+## O que fazer se algo der errado
+
+**"Java não encontrado" / download falhou**
+A ferramenta tenta instalar o Java automaticamente. Se o download falhar (ex.: sem internet), instale o Java 21 manualmente em [adoptium.net](https://adoptium.net/).
+
+**O simulador não fica pronto / timeout**
+Execute `simulador status` para ver o estado atual. Se necessário, rode `simulador stop` e tente `simulador start` novamente. Verifique também se a porta 8080 não está sendo usada por outro programa com `simulador start --port 9090`.
+
+**"Nenhuma instância registrada"**
+O simulador não está rodando. Use `simulador start` para iniciá-lo.
+
+---
+
+## Fluxo típico de uso
 
 ```bash
-cd cli-simulador
+# 1. Inicie o simulador
+./simulador start
 
-# Linux
-GOOS=linux   GOARCH=amd64 go build -o build/simulador-linux   ./cmd/simulador/main.go
+# 2. Verifique se está pronto
+./simulador status
 
-# Windows
-GOOS=windows GOARCH=amd64 go build -o build/simulador.exe     ./cmd/simulador/main.go
+# 3. Use o simulador para seus testes...
+#    (o servidor responde em http://localhost:8080)
 
-# macOS
-GOOS=darwin  GOARCH=amd64 go build -o build/simulador-macos   ./cmd/simulador/main.go
+# 4. Ao terminar, pare o simulador
+./simulador stop
 ```
-
----
-
-## Roadmap
-
-As funcionalidades abaixo estão planejadas para sprints futuras:
-
-| Funcionalidade | Descrição |
-|---|---|
-| `simulador stop` | Encerra o processo do simulador pelo PID salvo em arquivo |
-| `simulador status` | Verifica se o simulador está em execução |
-| `simulador logs` | Exibe a saída do simulador em tempo real (`tail -f`) |
-| Gerenciamento de PID | Gravar o PID em `~/.hubsaude/simulador.pid` para uso pelos outros comandos |
-| Localização do JAR | Mesma lógica do `cli-assinatura`: flag `--jar`, variável de ambiente `SIMULADOR_JAR`, `~/.hubsaude/simulador.jar`, diretório atual |
-| Testes unitários | Cobertura dos comandos `start` e `stop` com processos mock |

@@ -53,11 +53,34 @@ jobs:
         run: mvn test
 
   # ---------------------------------------------------------------------------
+  # Testes Go em Windows (E6 — portabilidade real comprovada em CI)
+  # ---------------------------------------------------------------------------
+  test-go-windows:
+    name: Testes Go (Windows) — ${{ matrix.app }}
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        app: [cli-assinatura, cli-simulador]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Executar testes
+        working-directory: ./${{ matrix.app }}
+        run: |
+          go mod tidy
+          go test ./... -v -count=1
+
+  # ---------------------------------------------------------------------------
   # Build CLIs Go (multiplataforma)
   # ---------------------------------------------------------------------------
   build-go-apps:
     name: Build CLIs Go
-    needs: test-go
+    needs: [test-go, test-go-windows]
     runs-on: ubuntu-latest
     strategy:
       matrix:

@@ -1,16 +1,5 @@
-# Compiled class file
+# ---- Java / Maven ----
 *.class
-
-# Log file
-*.log
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
 *.jar
 *.war
 *.nar
@@ -18,10 +7,30 @@
 *.zip
 *.tar.gz
 *.rar
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+*.ctxt
+.mtj.tmp/
 hs_err_pid*
 replay_pid*
 
-cli-assinatura/build
-cli-assinatura/build/*
+# Maven build output
+target/
+**/target/
+
+# ---- IDE / Editor ----
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ---- Go build output ----
+cli-assinatura/build/
+cli-simulador/build/
+build/
+
+# ---- Log files ----
+*.log
