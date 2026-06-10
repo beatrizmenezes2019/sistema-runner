@@ -41,7 +41,7 @@ public class Pkcs11Service {
      * Verifica se a biblioteca PKCS#11 informada é acessível e o token responde.
      *
      * @param library   caminho para a biblioteca .so / .dll do PKCS#11
-     * @param slot      número do slot do token
+     * @param slot      índice do slot na lista (0 = primeiro) — não é o ID numérico do slot
      * @param pin       PIN de autenticação do usuário
      * @return true se o provider foi carregado e o token autenticado com sucesso
      */
@@ -64,7 +64,7 @@ public class Pkcs11Service {
      *
      * @param data      dados a assinar
      * @param library   caminho para a biblioteca PKCS#11
-     * @param slot      número do slot
+     * @param slot      índice do slot na lista (0 = primeiro) — não é o ID numérico do slot
      * @param pin       PIN do token
      * @param alias     alias da chave privada no keystore
      * @return bytes da assinatura RSA-SHA256
@@ -101,10 +101,14 @@ public class Pkcs11Service {
     }
 
     /**
-     * Constrói um SunPKCS11 Provider a partir da biblioteca e slot informados.
+     * Constrói um SunPKCS11 Provider a partir da biblioteca e índice de slot informados.
      *
      * <p>Em Java 9+, o método {@code Provider.configure()} aceita uma string de configuração
      * inline que deve começar com {@code --} (duplo hífen).</p>
+     *
+     * <p>O parâmetro {@code slot} é tratado como {@code slotListIndex} (índice na lista de slots),
+     * não como o ID numérico retornado pelo hardware. O SoftHSM2 2.6+ atribui IDs grandes e
+     * não-previsíveis após {@code --init-token}, portanto usar o índice é mais portável.</p>
      */
     private Provider buildProvider(String library, String slot) throws Pkcs11Exception {
         Provider provider = Security.getProvider("SunPKCS11");
@@ -113,8 +117,10 @@ public class Pkcs11Service {
                 "Provider SunPKCS11 não disponível nesta JVM. " +
                 "Certifique-se de usar JDK 21 (não JRE) com suporte a SunPKCS11.");
         }
-        // Configuração inline: deve começar com "--" (Java 9+)
-        String config = "--name=AssinadorPKCS11\nlibrary=" + library + "\nslot=" + slot;
+        // Configuração inline: deve começar com "--" (Java 9+).
+        // Usa slotListIndex (posição na lista) em vez de slot (ID numérico):
+        // o SoftHSM2 2.6+ atribui IDs grandes após --init-token, tornando slot=0 inválido.
+        String config = "--name=AssinadorPKCS11\nlibrary=" + library + "\nslotListIndex=" + slot;
         return provider.configure(config);
     }
 
