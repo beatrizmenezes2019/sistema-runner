@@ -210,4 +210,3 @@ func extractPort(t *testing.T, url string) int {
 	}
 	return port
 }
-
