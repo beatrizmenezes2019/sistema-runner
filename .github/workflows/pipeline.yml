@@ -26,9 +26,11 @@ jobs:
         with:
           go-version: '1.24'   # deve coincidir com a versão Go usada para compilar golangci-lint
 
-      - name: Baixar dependências Go
+      - name: Compilar dependências Go (gera export data para golangci-lint)
         working-directory: ./${{ matrix.app }}
-        run: go mod download
+        run: |
+          go mod tidy
+          go build ./...
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
