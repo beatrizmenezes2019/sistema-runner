@@ -83,6 +83,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y softhsm2
+          # Cria config com diretório de tokens acessível pelo runner
+          mkdir -p /tmp/softhsm/tokens
+          printf 'directories.tokendir = /tmp/softhsm/tokens/\nobjectstore.backend = file\n' > /tmp/softhsm2.conf
+          export SOFTHSM2_CONF=/tmp/softhsm2.conf
+          echo "SOFTHSM2_CONF=/tmp/softhsm2.conf" >> $GITHUB_ENV
           softhsm2-util --init-token --slot 0 --label "TestToken" --pin 1234 --so-pin 0000
           echo "SOFTHSM2_AVAILABLE=true" >> $GITHUB_ENV
 
@@ -90,6 +95,7 @@ jobs:
         working-directory: ./assinador
         env:
           SOFTHSM2_AVAILABLE: ${{ env.SOFTHSM2_AVAILABLE }}
+          SOFTHSM2_CONF: ${{ env.SOFTHSM2_CONF }}
         run: mvn test jacoco:report
 
       - name: Upload relatório de cobertura Java

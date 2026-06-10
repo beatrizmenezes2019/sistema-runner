@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -233,10 +234,15 @@ func TestBuildValidateBody(t *testing.T) {
 // -------------------------------------------------------------------------
 
 // overrideStatePath redireciona statePath() para um arquivo dentro de t.TempDir().
+// Cria também o diretório .hubsaude para que os.WriteFile funcione diretamente.
 func overrideStatePath(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("HOME", dir) // hubsaudePath usa os.UserHomeDir()
+	t.Setenv("HOME", dir)        // hubsaudePath usa os.UserHomeDir() — Linux/macOS
+	t.Setenv("USERPROFILE", dir) // Windows
+	if err := os.MkdirAll(filepath.Join(dir, ".hubsaude"), 0755); err != nil {
+		t.Fatalf("overrideStatePath: não foi possível criar .hubsaude: %v", err)
+	}
 }
 
 // fakeHealthServer sobe um servidor HTTP que responde ao /health com o código dado.
