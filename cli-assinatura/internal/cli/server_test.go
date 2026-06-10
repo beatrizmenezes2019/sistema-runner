@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -44,7 +45,7 @@ func TestReadState_Missing(t *testing.T) {
 func TestClearState(t *testing.T) {
 	overrideStatePath(t)
 
-	writeState(&serverState{PID: 1, Port: 8080})
+	_ = writeState(&serverState{PID: 1, Port: 8080})
 	clearState()
 
 	if _, err := os.Stat(statePath()); !os.IsNotExist(err) {
@@ -54,7 +55,7 @@ func TestClearState(t *testing.T) {
 
 func TestReadState_CorruptJson(t *testing.T) {
 	overrideStatePath(t)
-	os.WriteFile(statePath(), []byte("{ isso nao e json"), 0644)
+	_ = os.WriteFile(statePath(), []byte("{ isso nao e json"), 0644)
 
 	if s := readState(); s != nil {
 		t.Errorf("esperava nil para JSON corrompido, obteve %+v", s)
@@ -99,7 +100,7 @@ func TestFindActiveServer_ActiveInstance(t *testing.T) {
 	srv := fakeHealthServer(t, http.StatusOK)
 	port := serverPort(t, srv.URL)
 
-	writeState(&serverState{PID: 99999, Port: port})
+	_ = writeState(&serverState{PID: 99999, Port: port})
 
 	got := findActiveServer()
 	if got == nil {
@@ -114,7 +115,7 @@ func TestFindActiveServer_StaleState(t *testing.T) {
 	overrideStatePath(t)
 
 	// Salva estado com porta que não tem servidor
-	writeState(&serverState{PID: 99999, Port: 19998})
+	_ = writeState(&serverState{PID: 99999, Port: 19998})
 
 	got := findActiveServer()
 	if got != nil {
@@ -144,7 +145,7 @@ func TestServerStatus_Active(t *testing.T) {
 	overrideStatePath(t)
 	srv := fakeHealthServer(t, http.StatusOK)
 	port := serverPort(t, srv.URL)
-	writeState(&serverState{PID: 42, Port: port})
+	_ = writeState(&serverState{PID: 42, Port: port})
 
 	status := serverStatus(port)
 	if !strings.Contains(status, "ATIVO") {
@@ -233,10 +234,15 @@ func TestBuildValidateBody(t *testing.T) {
 // -------------------------------------------------------------------------
 
 // overrideStatePath redireciona statePath() para um arquivo dentro de t.TempDir().
+// Cria também o diretório .hubsaude para que os.WriteFile funcione diretamente.
 func overrideStatePath(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("HOME", dir) // hubsaudePath usa os.UserHomeDir()
+	t.Setenv("HOME", dir)        // hubsaudePath usa os.UserHomeDir() — Linux/macOS
+	t.Setenv("USERPROFILE", dir) // Windows
+	if err := os.MkdirAll(filepath.Join(dir, ".hubsaude"), 0755); err != nil {
+		t.Fatalf("overrideStatePath: não foi possível criar .hubsaude: %v", err)
+	}
 }
 
 // fakeHealthServer sobe um servidor HTTP que responde ao /health com o código dado.

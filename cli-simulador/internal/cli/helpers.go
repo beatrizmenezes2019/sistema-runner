@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,9 +48,8 @@ func javaBinary() string {
 	return "java"
 }
 
-// logVerbose emite mensagem de diagnóstico quando --verbose está ativo.
+// logVerbose emite mensagem de diagnóstico via slog.Debug.
+// Mantido por compatibilidade com código existente; prefira slog.Debug diretamente.
 func logVerbose(format string, args ...any) {
-	if verbose {
-		fmt.Fprintf(os.Stderr, "[verbose] "+format+"\n", args...)
-	}
+	slog.Debug(fmt.Sprintf(format, args...))
 }

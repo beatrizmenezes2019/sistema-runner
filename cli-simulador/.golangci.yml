@@ -1,0 +1,20 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - bodyclose
+    # misspell removido: codebase em português gera falsos positivos
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+
+issues:
+  exclude-rules:
+    - path: cmd/
+      linters: [errcheck]

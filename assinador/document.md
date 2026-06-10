@@ -2,7 +2,7 @@
 
 Componente Java responsável por realizar as operações de **criação** e **validação** de assinaturas digitais no padrão ICP-Brasil. Pode ser invocado pela linha de comando (modo CLI) ou como servidor HTTP (modo servidor).
 
-> **Modo atual:** simulado. A estrutura criptográfica gerada segue o padrão ICP-Brasil (JWS JSON Serialization, FHIR Signature), mas sem assinatura RSA real com chave privada. Adequado para desenvolvimento, testes e integração.
+> **Modo atual:** simulado. A estrutura criptográfica gerada segue o padrão ICP-Brasil (JWS JSON Serialization, FHIR Signature), mas sem assinatura RSA real com chave privada. Adequado para desenvolvimento, testes e integração. Para uso com dispositivo criptográfico real, veja a seção [PKCS#11](#pkcs11--dispositivo-criptográfico).
 
 ---
 
@@ -97,6 +97,8 @@ Protected header decodificado:
 }
 ```
 
+> **Nota sobre o campo `signature`:** em modo simulado, o valor é `SHA-256(protected.payload)` em Base64Url — estruturalmente correto mas não é uma assinatura RSA real. Para produção, o `Pkcs11Service` realiza `RSA-SHA256` com a chave privada do token.
+
 ### Saída em caso de erro
 
 `OperationOutcome` FHIR R4 com `severity: fatal`.
@@ -163,6 +165,52 @@ java -jar assinador.jar VALIDATE \
 
 ---
 
+## PKCS#11 — Dispositivo Criptográfico
+
+O `Pkcs11Service` permite usar um **token físico** (smart card, e-token) ou o **simulador SoftHSM2** para realizar assinaturas RSA reais.
+
+### Configuração do `config-cripto` para TOKEN
+
+```json
+{
+  "TOKEN": {
+    "library": "/usr/lib/softhsm/libsofthsm2.so",
+    "slot": "0",
+    "pin": "1234",
+    "alias": "minha-chave"
+  }
+}
+```
+
+| Campo | Descrição |
+|---|---|
+| `library` | Caminho para a biblioteca PKCS#11 (`.so` no Linux, `.dll` no Windows) |
+| `slot` | Número do slot do token |
+| `pin` | PIN de autenticação do usuário |
+| `alias` | Nome (label) da chave privada no token |
+
+### Setup com SoftHSM2 (ambiente de teste)
+
+```bash
+# Instalar SoftHSM2
+sudo apt-get install softhsm2          # Debian/Ubuntu
+brew install softhsm                   # macOS
+
+# Inicializar token
+softhsm2-util --init-token --slot 0 --label "MeuToken" --pin 1234 --so-pin 0000
+
+# Gerar par de chaves RSA-2048
+pkcs11-tool --module /usr/lib/softhsm/libsofthsm2.so \
+  --login --pin 1234 \
+  --keypairgen --key-type RSA:2048 --label "minha-chave"
+```
+
+### Comportamento quando o dispositivo não está disponível
+
+Se a biblioteca não for encontrada ou o PIN estiver errado, o serviço retorna `Pkcs11Exception` com mensagem explicativa — nunca silencia o erro.
+
+---
+
 ## API REST (modo servidor)
 
 ### `GET /health`
@@ -181,13 +229,13 @@ Cria uma assinatura digital.
 **Corpo da requisição:**
 ```json
 {
-  "bundle":     "/caminho/bundle.json",
-  "provenance": "/caminho/provenance.json",
+  "bundle":      "/caminho/bundle.json",
+  "provenance":  "/caminho/provenance.json",
   "configCripto": "{}",
-  "cert":       "/caminho/certificado.cer",
-  "timestamp":  "1751328000",
-  "estrategia": "AD_RB",
-  "pid":        "https://politica.exemplo.gov.br|0.0.1"
+  "cert":        "/caminho/certificado.cer",
+  "timestamp":   "1751328000",
+  "estrategia":  "AD_RB",
+  "pid":         "https://politica.exemplo.gov.br|0.0.1"
 }
 ```
 
@@ -237,6 +285,7 @@ Encerra o servidor de forma controlada.
 |---|---|---|
 | `SERVER_PORT` | `8080` | Porta do servidor HTTP |
 | `ASSINADOR_TIMEOUT_MINUTOS` | desativado | Minutos de inatividade antes do auto-shutdown |
+| `SOFTHSM2_LIB` | `/usr/lib/softhsm/libsofthsm2.so` | Caminho alternativo para a biblioteca SoftHSM2 nos testes |
 
 ---
 
@@ -244,13 +293,24 @@ Encerra o servidor de forma controlada.
 
 ```bash
 cd assinador
-mvn test
+mvn test                # executa todos os testes
+mvn test jacoco:report  # executa + gera relatório de cobertura em target/site/jacoco/
 ```
 
 Os testes cobrem:
-- Carregamento do contexto Spring (`AssinadorApplicationTests`)
-- Todos os endpoints HTTP com MockMvc (`SignatureControllerTest`)
-- Todas as validações de parâmetros SIGN e VALIDATE (`SignatureParamsValidationTest`)
+
+- **`AssinadorApplicationTests`** — carregamento do contexto Spring
+- **`SignatureControllerTest`** — todos os endpoints HTTP via MockMvc
+- **`SignatureParamsValidationTest`** — todas as validações de parâmetros SIGN e VALIDATE
+- **`Pkcs11ServiceTest`** — integração PKCS#11 com SoftHSM2 (executado em CI; requer `SOFTHSM2_AVAILABLE=true` localmente)
+
+Para rodar os testes PKCS#11 localmente:
+
+```bash
+# Instalar e configurar SoftHSM2 (ver seção PKCS#11)
+export SOFTHSM2_AVAILABLE=true
+mvn test
+```
 
 ---
 

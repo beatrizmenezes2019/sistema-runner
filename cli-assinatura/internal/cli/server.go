@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -140,7 +141,7 @@ func startServer(port, timeoutMinutes int) (*serverState, error) {
 
 	if err := writeState(state); err != nil {
 		// Não fatal — servidor subiu, mas não conseguimos salvar o estado
-		fmt.Fprintf(os.Stderr, "[aviso] Não foi possível salvar estado em %s: %v\n", statePath(), err)
+		slog.Warn("não foi possível salvar estado", "path", statePath(), "error", err)
 	}
 
 	// Aguarda o servidor estar pronto
@@ -153,7 +154,7 @@ func startServer(port, timeoutMinutes int) (*serverState, error) {
 	}
 
 	// Timeout: encerra o processo que não ficou pronto
-	cmd.Process.Kill()
+	_ = cmd.Process.Kill()
 	clearState()
 	return nil, fmt.Errorf(
 		"assinador.jar não ficou pronto em %s na porta %d.\n"+
@@ -199,9 +200,9 @@ func stopServer(port int) error {
 		proc, err := os.FindProcess(state.PID)
 		if err == nil {
 			if runtime.GOOS == "windows" {
-				proc.Kill()
+				_ = proc.Kill()
 			} else {
-				proc.Signal(syscall.SIGTERM)
+				_ = proc.Signal(syscall.SIGTERM)
 			}
 		}
 	}

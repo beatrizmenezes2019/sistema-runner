@@ -10,7 +10,37 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Testes Go
+  # Lint Go (D — aderência ao estilo exigida via CI)
+  # ---------------------------------------------------------------------------
+  lint-go:
+    name: Lint Go — ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [cli-assinatura, cli-simulador]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'   # deve coincidir com a versão Go usada para compilar golangci-lint
+
+      - name: Compilar dependências Go (gera export data para golangci-lint)
+        working-directory: ./${{ matrix.app }}
+        run: |
+          go mod tidy
+          go build ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ./${{ matrix.app }}
+          args: --timeout=5m
+
+  # ---------------------------------------------------------------------------
+  # Testes Go com cobertura (Linux)
   # ---------------------------------------------------------------------------
   test-go:
     name: Testes Go — ${{ matrix.app }}
@@ -26,14 +56,21 @@ jobs:
         with:
           go-version: '1.26'
 
-      - name: Executar testes
+      - name: Executar testes com cobertura
         working-directory: ./${{ matrix.app }}
         run: |
           go mod tidy
-          go test ./... -v -count=1
+          go test ./... -v -count=1 -coverprofile=coverage.out -covermode=atomic
+          go tool cover -func=coverage.out
+
+      - name: Upload relatório de cobertura Go
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-go-${{ matrix.app }}
+          path: ./${{ matrix.app }}/coverage.out
 
   # ---------------------------------------------------------------------------
-  # Testes Java
+  # Testes Java com cobertura (JaCoCo)
   # ---------------------------------------------------------------------------
   test-java:
     name: Testes Java — assinador
@@ -48,9 +85,30 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Executar testes
+      - name: Instalar SoftHSM2 (PKCS#11 simulado)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y softhsm2
+          # Cria config com diretório de tokens acessível pelo runner
+          mkdir -p /tmp/softhsm/tokens
+          printf 'directories.tokendir = /tmp/softhsm/tokens/\nobjectstore.backend = file\n' > /tmp/softhsm2.conf
+          export SOFTHSM2_CONF=/tmp/softhsm2.conf
+          echo "SOFTHSM2_CONF=/tmp/softhsm2.conf" >> $GITHUB_ENV
+          softhsm2-util --init-token --slot 0 --label "TestToken" --pin 1234 --so-pin 0000
+          echo "SOFTHSM2_AVAILABLE=true" >> $GITHUB_ENV
+
+      - name: Executar testes com JaCoCo
         working-directory: ./assinador
-        run: mvn test
+        env:
+          SOFTHSM2_AVAILABLE: ${{ env.SOFTHSM2_AVAILABLE }}
+          SOFTHSM2_CONF: ${{ env.SOFTHSM2_CONF }}
+        run: mvn test jacoco:report
+
+      - name: Upload relatório de cobertura Java
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-java-jacoco
+          path: assinador/target/site/jacoco/
 
   # ---------------------------------------------------------------------------
   # Testes Go em Windows (E6 — portabilidade real comprovada em CI)
@@ -80,7 +138,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-go-apps:
     name: Build CLIs Go
-    needs: [test-go, test-go-windows]
+    needs: [lint-go, test-go, test-go-windows]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -109,7 +167,6 @@ jobs:
           CMD_PATH="./cmd/assinatura/main.go"
           if [ "${{ matrix.app }}" = "cli-simulador" ]; then CMD_PATH="./cmd/simulador/main.go"; fi
 
-          # Injeta versão e commit no binário via ldflags
           LDFLAGS="-X github.com/beatrizmenezes2019/sistema-runner/${{ matrix.app }}/internal/cli.BuildVersion=${VERSION} \
                    -X github.com/beatrizmenezes2019/sistema-runner/${{ matrix.app }}/internal/cli.BuildCommit=${COMMIT}"
 
@@ -156,6 +213,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Release (apenas em tags v*)
+  # Inclui: checksums SHA256, assinatura Cosign (US-05.3)
   # ---------------------------------------------------------------------------
   release:
     name: Publicar Release
@@ -164,6 +222,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write  # necessário para Cosign OIDC keyless signing
 
     steps:
       - uses: actions/checkout@v4
@@ -193,16 +252,50 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      - name: Instalar Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Assinar artefatos com Cosign (keyless OIDC)
+        run: |
+          cd dist
+          for f in $(ls | grep -v SHA256SUMS.txt); do
+            cosign sign-blob \
+              --yes \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.pem" \
+              "$f"
+          done
+          # Assina também o arquivo de checksums
+          cosign sign-blob \
+            --yes \
+            --output-signature "SHA256SUMS.txt.sig" \
+            --output-certificate "SHA256SUMS.txt.pem" \
+            SHA256SUMS.txt
+
       - name: Publicar GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/*.exe
-            dist/*.jar
-            dist/*-amd64
-            dist/SHA256SUMS.txt
+            dist/*
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
+          body: |
+            ## Verificação de integridade
+
+            Verifique um artefato com Cosign:
+            ```bash
+            cosign verify-blob \
+              --signature <arquivo>.sig \
+              --certificate <arquivo>.pem \
+              --certificate-identity-regexp "https://github.com/.*" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              <arquivo>
+            ```
+
+            Verifique o checksum SHA-256:
+            ```bash
+            sha256sum -c SHA256SUMS.txt
+            ```
           draft: false
           prerelease: false
         env:

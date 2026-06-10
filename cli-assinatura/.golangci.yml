@@ -1,0 +1,21 @@
+linters:
+  enable:
+    - errcheck       # verifica erros não tratados
+    - gosimple       # simplificações idiomáticas
+    - govet          # análise estática do go vet
+    - ineffassign    # atribuições ineficazes
+    - staticcheck    # conjunto amplo de verificações estáticas
+    - unused         # símbolos não utilizados
+    - gofmt          # formatação padrão
+    - bodyclose      # verifica se http.Response.Body é fechado
+    # misspell removido: codebase em português gera falsos positivos (comando, operacional, etc.)
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+
+issues:
+  exclude-rules:
+    # main.go pode ter erros de cobra ignorados intencionalmente
+    - path: cmd/
+      linters: [errcheck]

@@ -1,6 +1,6 @@
 module github.com/beatrizmenezes2019/sistema-runner/cli-assinatura
 
-go 1.26.1
+go 1.22
 
 require github.com/spf13/cobra v1.10.2
 

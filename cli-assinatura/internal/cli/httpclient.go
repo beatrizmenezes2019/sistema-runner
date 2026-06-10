@@ -97,13 +97,13 @@ func postToServer(port int, path string, body []byte) error {
 func buildSignBody(params []string) []byte {
 	// params = [bundle, provenance, configCripto, cert, timestamp, estrategia, pid]
 	m := map[string]string{
-		"bundle":      safeGet(params, 0),
-		"provenance":  safeGet(params, 1),
+		"bundle":       safeGet(params, 0),
+		"provenance":   safeGet(params, 1),
 		"configCripto": safeGet(params, 2),
-		"cert":        safeGet(params, 3),
-		"timestamp":   safeGet(params, 4),
-		"estrategia":  safeGet(params, 5),
-		"pid":         safeGet(params, 6),
+		"cert":         safeGet(params, 3),
+		"timestamp":    safeGet(params, 4),
+		"estrategia":   safeGet(params, 5),
+		"pid":          safeGet(params, 6),
 	}
 	b, _ := json.Marshal(m)
 	return b

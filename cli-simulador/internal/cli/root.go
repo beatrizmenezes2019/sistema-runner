@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"log/slog"
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
@@ -26,4 +29,15 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Exibir saída de diagnóstico detalhada")
+	cobra.OnInitialize(setupLogger)
+}
+
+// setupLogger configura o logger estruturado (slog) de acordo com a flag --verbose.
+func setupLogger() {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(handler))
 }
