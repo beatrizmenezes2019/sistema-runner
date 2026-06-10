@@ -121,10 +121,9 @@ func startServer(port, timeoutMinutes int) (*serverState, error) {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 
-	// Desanexa o processo do terminal para que continue rodando após o CLI sair
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	}
+	// Desanexa o processo do terminal para que continue rodando após o CLI sair.
+	// A implementação varia por plataforma (ver server_sysattr_unix.go / server_sysattr_windows.go).
+	detachProcess(cmd)
 
 	// Propaga ASSINADOR_TIMEOUT_MINUTOS via env se definido
 	if timeoutMinutes > 0 {
