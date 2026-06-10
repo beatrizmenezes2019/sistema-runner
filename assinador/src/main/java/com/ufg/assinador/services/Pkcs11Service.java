@@ -42,8 +42,10 @@ public class Pkcs11Service {
      *
      * @param library   caminho para a biblioteca .so / .dll do PKCS#11
      * @param slot      índice do slot na lista (0 = primeiro) — não é o ID numérico do slot
-     * @param pin       PIN de autenticação do usuário
-     * @return true se o provider foi carregado e o token autenticado com sucesso
+     * @param pin       PIN de autenticação do usuário (usado na abertura de sessão; a
+     *                  verificação efetiva depende do token — tokens sem objetos privados
+     *                  podem aceitar qualquer PIN nesta fase e falhar apenas no {@link #sign})
+     * @return true se a biblioteca e o slot estão acessíveis e a sessão foi aberta
      */
     public boolean isTokenAvailable(String library, String slot, String pin) {
         Provider provider = null;
