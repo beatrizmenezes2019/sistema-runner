@@ -13,31 +13,31 @@ var rootCmd = &cobra.Command{
 	Long: `assinatura — Interface de linha de comando para criação e validação
 de assinaturas digitais ICP-Brasil via assinador.jar.
 
-Exemplos de uso:
-  # Assinar um bundle FHIR
-  assinatura sign \
-    --bundle bundle.json \
-    --provenance provenance.json \
-    --config '{"PKCS12":{"Conteúdo":"base64...","Senha":"1234","Alias":"meu-cert"}}' \
-    --cert certificado.der \
-    --timestamp 1751328001 \
-    --estrategia AD_RB \
-    --pid 12345678901
+Modo de operação padrão: servidor HTTP (menor latência).
+O CLI inicia o servidor automaticamente se necessário.
+Use --local para forçar invocação direta via java -jar.
 
-  # Validar uma assinatura
-  assinatura validate \
-    --jws "eyJhbGciOiJSUzI1NiJ9.cGF5bG9hZA.c2lnbmF0dXJl" \
-    --config '{"trustStore":["abc123def456"]}'
+Comandos disponíveis:
+  start     Inicia o assinador.jar no modo servidor HTTP
+  stop      Encerra o servidor assinador
+  status    Exibe o estado do servidor
+  sign      Cria uma assinatura digital
+  validate  Valida uma assinatura digital
+  version   Exibe versão e commit do CLI
 
-  # Modo local explícito (sem servidor HTTP)
-  assinatura sign --local --bundle bundle.json ...
+Exemplos rápidos:
+  assinatura start --port 8080 --timeout 30
+  assinatura sign --bundle bundle.json --provenance prov.json \
+    --config '{"PKCS12":{...}}' --cert cert.der \
+    --timestamp 1751328001 --estrategia AD_RB --pid 123
+  assinatura validate --jws "eyJ..." --config '{"trustStore":["abc"]}'
+  assinatura stop
 
 Localização do JAR:
-  O assinador.jar é procurado na seguinte ordem:
-    1. Flag --jar <caminho>
-    2. Variável de ambiente ASSINADOR_JAR
-    3. ~/.hubsaude/assinador.jar
-    4. ./assinador.jar (diretório atual)`,
+  1. Flag --jar <caminho>
+  2. Variável ASSINADOR_JAR
+  3. ~/.hubsaude/assinador.jar
+  4. ./assinador.jar`,
 }
 
 // Flags globais

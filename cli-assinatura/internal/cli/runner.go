@@ -48,34 +48,9 @@ func resolveJar() (string, error) {
 }
 
 // resolveJava retorna o executável `java` disponível no sistema.
+// Se java não estiver instalado, provisiona automaticamente o JDK 21 Temurin.
 func resolveJava() (string, error) {
-	// Verifica se há JAVA_HOME definido
-	if jh := os.Getenv("JAVA_HOME"); jh != "" {
-		candidate := filepath.Join(jh, "bin", javaBinary())
-		if _, err := os.Stat(candidate); err == nil {
-			if verbose {
-				fmt.Fprintf(os.Stderr, "[verbose] java encontrado via JAVA_HOME: %s\n", candidate)
-			}
-			return candidate, nil
-		}
-	}
-
-	// Tenta o PATH
-	path, err := exec.LookPath(javaBinary())
-	if err == nil {
-		if verbose {
-			fmt.Fprintf(os.Stderr, "[verbose] java encontrado no PATH: %s\n", path)
-		}
-		return path, nil
-	}
-
-	return "", fmt.Errorf(
-		"java não encontrado no sistema.\n" +
-			"Como resolver:\n" +
-			"  1. Instale o JDK 21: https://adoptium.net/\n" +
-			"  2. Verifique se java está no PATH: java --version\n" +
-			"  3. Ou defina JAVA_HOME apontando para o JDK instalado",
-	)
+	return resolveOrProvisionJava()
 }
 
 // runJar invoca o assinador.jar com os argumentos fornecidos e imprime o resultado.

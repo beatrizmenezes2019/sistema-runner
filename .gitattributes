@@ -1,0 +1,15 @@
+# Normaliza line endings para LF no repositório
+* text=auto eol=lf
+
+# Arquivos que devem manter CRLF no Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binários — não tocar
+*.jar binary
+*.zip binary
+*.tar.gz binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.class binary

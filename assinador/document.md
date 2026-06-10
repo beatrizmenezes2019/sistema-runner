@@ -1,197 +1,138 @@
-# Assinador — Núcleo Criptográfico FHIR R4
+# Assinador — Motor de Assinatura Digital
 
-Aplicação Java (Spring Boot 4 / JDK 21) responsável pela **assinatura digital** e **validação de assinaturas** de documentos de saúde no padrão FHIR R4, utilizando envelopes **JWS RS256 (JSON Web Signature)** compatíveis com ICP-Brasil.
+Componente Java responsável por realizar as operações de **criação** e **validação** de assinaturas digitais no padrão ICP-Brasil. Pode ser invocado pela linha de comando (modo CLI) ou como servidor HTTP (modo servidor).
 
-O assinador é invocado como ferramenta de linha de comando (`java -jar assinador.jar`) ou via `cli-assinatura` (wrapper Go).
-
----
-
-## Arquitetura Interna
-
-```
-AssinadorApplication (CommandLineRunner)
-    └── SignatureParamsValidation   — valida argumentos antes de qualquer I/O
-    └── SignatureService            — executa a criptografia e retorna OperationOutcome
-```
-
-**Fluxo geral:**
-1. `AssinadorApplication.run()` recebe os args da linha de comando.
-2. `SignatureParamsValidation` valida presença, formato e existência de cada parâmetro.
-3. Se válido, `SignatureService` executa `generateSignature()` ou `validate()`.
-4. O resultado é impresso em `stdout` como JSON FHIR R4 `OperationOutcome`.
-5. Exit code `0` = sucesso, `1` = erro de negócio (severity `fatal`), `2` = parâmetros inválidos.
+> **Modo atual:** simulado. A estrutura criptográfica gerada segue o padrão ICP-Brasil (JWS JSON Serialization, FHIR Signature), mas sem assinatura RSA real com chave privada. Adequado para desenvolvimento, testes e integração.
 
 ---
 
-## Pré-requisitos
+## Referências ICP-Brasil
 
-- Java 21 (JDK Temurin recomendado)
-- Certificado digital em formato PKCS12 (`.p12`) com chave privada
-- Certificado público exportado (`.cer` / `.der`) para o campo `x5c` do JWS
+- [Caso de uso: criar assinatura](https://fhir.saude.go.gov.br/r4/seguranca/caso-de-uso-criar-assinatura.html)
+- [Caso de uso: validar assinatura](https://fhir.saude.go.gov.br/r4/seguranca/caso-de-uso-validar-assinatura.html)
 
-Para exportar o certificado público a partir do PKCS12:
+---
+
+## Modos de operação
+
+### Modo CLI (padrão quando há argumentos)
+
+Recebe parâmetros pela linha de comando, executa a operação e encerra.
+
 ```bash
-keytool -export -alias SEU_ALIAS \
-  -file certificado.cer \
-  -keystore certificado.p12 \
-  -storepass SUA_SENHA
+java -jar assinador.jar SIGN <args...>
+java -jar assinador.jar VALIDATE <args...>
+```
+
+### Modo servidor (padrão quando não há argumentos)
+
+Sobe um servidor HTTP na porta configurada e aguarda requisições REST.
+
+```bash
+java -jar assinador.jar
+java -jar assinador.jar --server.port=9090
 ```
 
 ---
 
 ## Operação SIGN
 
-Lê o Bundle e Provenance FHIR, assina o conteúdo combinado com RS256 e retorna um `OperationOutcome` com o JWS em `diagnostics`.
-
-### Sintaxe
+### Contrato de argumentos (modo CLI)
 
 ```
 java -jar assinador.jar SIGN \
-  <bundle>       \
-  <provenance>   \
-  <config-cripto-json> \
-  <cert>         \
-  <timestamp>    \
-  <estrategia>   \
-  <pid>
+  <bundle>        \  # args[1]: caminho do arquivo bundle.json
+  <provenance>    \  # args[2]: caminho do arquivo provenance.json
+  <config-cripto> \  # args[3]: JSON de configuração (em modo simulado, use '{}')
+  <certificado>   \  # args[4]: caminho do arquivo de certificado (.cer / .der)
+  <timestamp>     \  # args[5]: Unix timestamp em segundos (long > 0)
+  <estrategia>    \  # args[6]: estratégia de carimbo (ex.: AD_RB)
+  <pid>              # args[7]: URI da política de assinatura
 ```
 
-### Parâmetros (posicionais, índices 1–7)
+### Saída em caso de sucesso
 
-| # | Parâmetro | Tipo | Descrição |
-|---|---|---|---|
-| 1 | `bundle` | Caminho de arquivo | Bundle FHIR (`.json`) a ser assinado |
-| 2 | `provenance` | Caminho de arquivo | Provenance FHIR (`.json`) complementar ao bundle |
-| 3 | `config-cripto-json` | JSON string | Configuração do material criptográfico (ver abaixo) |
-| 4 | `cert` | Caminho de arquivo | Certificado público (`.cer` / `.der`) para o cabeçalho `x5c` |
-| 5 | `timestamp` | Long (Unix seconds) | Instante da assinatura — deve ser positivo e razoável |
-| 6 | `estrategia` | String | Estratégia de carimbo de tempo (ex.: `AD_RB`, `AD_RT`) |
-| 7 | `pid` | String | Identificador do assinante (PID / URL da política) |
+Recurso FHIR `Signature` com:
+- `type`: tipo de assinatura (urn:iso:astm:E1762-95:2013 / 1.2.840.10065.1.12.1.1)
+- `when`: data/hora da assinatura
+- `data`: bytes do JWS JSON Serialization (RFC 7515 §3.2)
 
-### Formatos de `config-cripto-json`
-
-**PKCS12 (arquivo ou Base64):**
 ```json
 {
-  "PKCS12": {
-    "Conteúdo": "caminho/para/certificado.p12",
-    "Senha": "sua-senha",
-    "Alias": "seu-alias"
-  }
-}
-```
-O campo `Conteúdo` pode ser um **caminho de arquivo** (se contiver `/`, `\` ou `:`) ou uma string **Base64** do arquivo `.p12`.
-
-**TOKEN / SMARTCARD (PKCS11 — em desenvolvimento):**
-```json
-{
-  "TOKEN": {
-    "PIN": "1234",
-    "Identificador": "alias-do-token",
-    "slotId": 0
-  },
-  "middlewareCrypto": {
-    "Biblioteca": {
-      "Caminho": "/usr/lib/libpkcs11.so"
-    }
-  }
+  "type": [{ "system": "urn:iso:astm:E1762-95:2013", "code": "1.2.840.10065.1.12.1.1" }],
+  "when": "2025-06-30T12:00:00+00:00",
+  "data": "<base64 do JWS JSON>"
 }
 ```
 
-### Exemplo de execução
-
-```bash
-java -jar assinador.jar SIGN \
-  "C:\teste\bundle.json" \
-  "C:\teste\provenance.json" \
-  "{\"PKCS12\":{\"Conteúdo\":\"C:\\teste\\certificado.p12\",\"Senha\":\"senha123\",\"Alias\":\"assinador-teste\"}}" \
-  "C:\teste\certificado.cer" \
-  1751328001 \
-  "AD_RB" \
-  "https://fhir.saude.go.gov.br/r4/seguranca/ImplementationGuide/br.go.ses.seguranca|0.0.2"
-```
-
-### Resposta de sucesso (SIGN)
+### Estrutura do JWS JSON gerado (dentro de `data`)
 
 ```json
 {
-  "resourceType": "OperationOutcome",
-  "id": "a1b2c",
-  "text": { "status": "generated", "div": "..." },
-  "issue": [{
-    "severity": "information",
-    "code": "informational",
-    "details": { "text": "Assinatura gerada com sucesso" },
-    "diagnostics": "eyJhbGciOiJSUzI1NiIsInR5cCI6..."
+  "payload": "<sha256(bundle||provenance) em Base64Url>",
+  "signatures": [{
+    "protected": "<header em Base64Url>",
+    "header": {
+      "rRefs": {
+        "certRefs": [{
+          "certDigest": {
+            "digestValue": "<sha256 do certificado>",
+            "digestMethod": "http://www.w3.org/2001/04/xmlenc#sha256"
+          }
+        }]
+      }
+    },
+    "signature": "<sha256(protected.payload) em Base64Url>"
   }]
 }
 ```
 
-O campo `diagnostics` contém o **JWS compacto** no formato `header.payload.signature` (Base64Url), que deve ser usado como entrada para a operação `VALIDATE`.
+Protected header decodificado:
+```json
+{
+  "alg": "RS256",
+  "x5c": ["<certificado em Base64>"],
+  "iat": 1751328000,
+  "sigPId": { "id": "<pid informado>" }
+}
+```
+
+### Saída em caso de erro
+
+`OperationOutcome` FHIR R4 com `severity: fatal`.
+
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [{
+    "severity": "fatal",
+    "code": "exception",
+    "details": { "text": "Erro na geração da assinatura" },
+    "diagnostics": "<mensagem do erro>"
+  }]
+}
+```
 
 ---
 
 ## Operação VALIDATE
 
-Verifica a integridade criptográfica da assinatura, a confiança do certificado e o status de revogação.
-
-### Sintaxe
+### Contrato de argumentos (modo CLI)
 
 ```
 java -jar assinador.jar VALIDATE \
-  <jws-ou-operation-outcome> \
-  <config-json>
+  <jws>    \  # args[1]: base64(JWS JSON), JWS compacto ou OperationOutcome JSON com JWS em diagnostics
+  <config>    # args[2]: JSON de configuração da validação
 ```
 
-### Parâmetros (posicionais, índices 1–2)
+### Formatos aceitos para `<jws>`
 
-| # | Parâmetro | Tipo | Descrição |
-|---|---|---|---|
-| 1 | `jws` | String | JWS compacto (`header.payload.signature`) **ou** JSON `OperationOutcome` com o JWS em `issue[0].diagnostics` |
-| 2 | `config-json` | JSON string | Configuração de validação (ver abaixo) |
+- **JWS JSON Serialization em Base64** — formato preferencial (saída do SIGN)
+- **JWS JSON Serialization puro** — JSON iniciando com `{`
+- **JWS Compacto** — três partes separadas por `.` (ex.: `eyJ...eyJ...sig`)
+- **OperationOutcome JSON** — extrai o JWS do campo `diagnostics`
 
-### Formato de `config-json`
-
-```json
-{
-  "trustStore": ["sha256hex_do_cert_raiz"],
-  "minCertIssueDate": 1751328000,
-  "referenceTimestamp": 1751328001,
-  "timeoutOcsp": 30,
-  "timeoutCrl": 30,
-  "revocationPolicy": "strict",
-  "ocspUnknownHandling": "treat-as-revoked"
-}
-```
-
-| Campo | Padrão | Descrição |
-|---|---|---|
-| `trustStore` | — | Lista de hashes SHA-256 (hex) dos certificados raiz confiáveis. **Obrigatório.** |
-| `minCertIssueDate` | `1751328000` | Unix timestamp mínimo de emissão do certificado (segundos) |
-| `referenceTimestamp` | agora | Timestamp de referência para validar vigência do certificado |
-| `timeoutOcsp` | `30` | Timeout em segundos para consulta OCSP |
-| `timeoutCrl` | `30` | Timeout em segundos para download de CRL |
-| `revocationPolicy` | `"strict"` | `"strict"` = falha se não conseguir checar revogação; `"soft-fail"` = ignora erros de rede |
-| `ocspUnknownHandling` | `"treat-as-revoked"` | O que fazer quando OCSP responde `UNKNOWN`: `"treat-as-revoked"` ou `"allow"` |
-
-### Fluxo de validação
-
-1. Parseia o JWS (compacto ou extraído do `OperationOutcome`).
-2. Decodifica o cabeçalho protegido e extrai o campo `x5c` (cadeia de certificados).
-3. Calcula SHA-256 do certificado raiz e verifica contra `trustStore`.
-4. Verifica a assinatura RSA-SHA256 com a chave pública do certificado do assinante.
-5. Consulta revogação: OCSP (se presente no AIA do cert) → CRL (CDPs do cert).
-6. Retorna `OperationOutcome` com resultado.
-
-### Exemplo de execução
-
-```bash
-java -jar assinador.jar VALIDATE \
-  "eyJhbGciOiJSUzI1NiIsIng1YyI6WyIuLi4iXX0.cGF5bG9hZA.c2lnbmF0dXJl" \
-  "{\"trustStore\":[\"f2ca1bb6c7e907d06dafe4687e579fce76b37e4e93b7605022da52e6ccc26fd2\"],\"revocationPolicy\":\"strict\"}"
-```
-
-### Resposta de sucesso (VALIDATE)
+### Saída em caso de sucesso
 
 ```json
 {
@@ -200,77 +141,125 @@ java -jar assinador.jar VALIDATE \
     "severity": "information",
     "code": "informational",
     "details": { "text": "Assinatura validada com sucesso" },
-    "diagnostics": "SUCCESS"
+    "diagnostics": "VALIDATION.SUCCESS"
   }]
 }
 ```
 
-### Respostas de erro comuns
-
-| `diagnostics` | Causa |
-|---|---|
-| `CONFIG.TRUST-STORE-NOT-FOUND` | Hash SHA-256 do certificado raiz não está no `trustStore` |
-| `CRYPTO.SIGNATURE-INVALID` | Assinatura RS256 não confere com o payload |
-| `CERT.REVOKED` | Certificado revogado (OCSP ou CRL) |
-
----
-
-## Formato de Resposta Padrão
-
-Todas as saídas seguem o FHIR R4 `OperationOutcome`:
+### Saída em caso de erro estrutural
 
 ```json
 {
   "resourceType": "OperationOutcome",
-  "id": "<uuid-5-chars>",
-  "text": { "status": "generated", "div": "..." },
   "issue": [{
-    "severity": "information | fatal",
-    "code": "informational | exception | security | structure",
-    "details": { "text": "<descrição legível>" },
-    "diagnostics": "<dado técnico ou JWS>",
-    "location": ["<caminho do campo com erro, se houver>"]
+    "severity": "fatal",
+    "code": "structure",
+    "details": { "text": "Estrutura JWS inválida" },
+    "diagnostics": "<descrição do problema>",
+    "location": ["Signature.data"]
   }]
 }
 ```
 
 ---
 
-## Validação de Parâmetros
+## API REST (modo servidor)
 
-Antes de qualquer operação criptográfica, `SignatureParamsValidation` verifica cada argumento e retorna mensagens de erro descritivas com dicas de correção. Exemplos:
+### `GET /health`
 
+Verifica se o servidor está pronto para receber requisições.
+
+**Resposta:** `200 OK`
+```json
+{ "status": "UP", "service": "assinador" }
 ```
-[ERRO] Arquivo 'bundle (args[1])' não encontrado: 'C:\nao-existe.json'.
-[DICA] Verifique se o caminho está correto e o arquivo existe.
 
-[ERRO] Parâmetro 'timestamp' (args[5]) não é um número inteiro válido: 'abc'.
-[DICA] Forneça um timestamp Unix em segundos (ex.: 1751328000).
+### `POST /sign`
+
+Cria uma assinatura digital.
+
+**Corpo da requisição:**
+```json
+{
+  "bundle":     "/caminho/bundle.json",
+  "provenance": "/caminho/provenance.json",
+  "configCripto": "{}",
+  "cert":       "/caminho/certificado.cer",
+  "timestamp":  "1751328000",
+  "estrategia": "AD_RB",
+  "pid":        "https://politica.exemplo.gov.br|0.0.1"
+}
+```
+
+**Resposta sucesso:** `200 OK` com FHIR `Signature`
+**Resposta erro de negócio:** `422 Unprocessable Entity` com FHIR `OperationOutcome`
+**Resposta parâmetros inválidos:** `400 Bad Request` com `OperationOutcome`
+
+### `POST /validate`
+
+Valida uma assinatura digital.
+
+**Corpo da requisição:**
+```json
+{
+  "jws":        "<conteúdo da assinatura>",
+  "configJson": "{\"trustStore\":[]}"
+}
+```
+
+**Resposta sucesso:** `200 OK` com FHIR `OperationOutcome` (`VALIDATION.SUCCESS`)
+**Resposta inválido:** `422 Unprocessable Entity` com detalhes do erro
+
+### `POST /shutdown`
+
+Encerra o servidor de forma controlada.
+
+**Resposta:** `200 OK`
+```json
+{ "status": "SHUTTING_DOWN" }
 ```
 
 ---
 
-## Testes
+## Exit codes (modo CLI)
 
-Os testes unitários ficam em `src/test/java/com/ufg/assinador/`.
+| Código | Significado |
+|---|---|
+| `0` | Operação concluída com sucesso |
+| `1` | Erro de negócio (OperationOutcome com `fatal`) |
+| `2` | Erro de parâmetros (argumentos inválidos ou ausentes) |
+
+---
+
+## Configuração (variáveis de ambiente)
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `SERVER_PORT` | `8080` | Porta do servidor HTTP |
+| `ASSINADOR_TIMEOUT_MINUTOS` | desativado | Minutos de inatividade antes do auto-shutdown |
+
+---
+
+## Executar os testes
 
 ```bash
-# Rodar todos os testes
 cd assinador
 mvn test
-
-# Rodar apenas os testes de validação de parâmetros
-mvn test -Dtest=SignatureParamsValidationTest
 ```
 
-**Cobertura atual:**
-- `SignatureParamsValidationTest` — 15 casos cobrindo sucesso, argumentos insuficientes, arquivos inexistentes, JSON malformado, timestamp inválido e campos vazios para `SIGN` e `VALIDATE`.
-- `AssinadorApplicationTests` — verifica carregamento do contexto Spring com mocks dos serviços.
+Os testes cobrem:
+- Carregamento do contexto Spring (`AssinadorApplicationTests`)
+- Todos os endpoints HTTP com MockMvc (`SignatureControllerTest`)
+- Todas as validações de parâmetros SIGN e VALIDATE (`SignatureParamsValidationTest`)
 
 ---
 
-## Limitações Conhecidas
+## Build
 
-- **PKCS11/TOKEN/SMARTCARD**: a estrutura de código existe, mas a comunicação com o hardware (SunPKCS11) não está integrada e testada.
-- **OCSP**: o método `checkOCSP` retorna sempre `GOOD` (stub). A verificação real de revogação ocorre apenas via CRL.
-- **REST API**: o assinador funciona exclusivamente via CLI. Endpoints HTTP ainda não foram implementados.
+```bash
+cd assinador
+mvn clean package
+# Gera: target/assinador-<versão>.jar
+```
+
+O JAR final é autocontido (fat-jar) com `Main-Class` configurado — sem dependências externas.
